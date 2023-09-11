@@ -24,12 +24,12 @@ is considered a profiling context. Think of the context as tags or labels for th
 implements a similar concept known as profiling labels.
 
 # Contextualizing JFR data
-[JFR (or JDK Flight Recorder)](https://en.wikipedia.org/wiki/JDK_Flight_Recorder) is the primary source of 
-profiling data for JVM. 
-While it's often believed JFR lacks support for profiling context or labeling, it's not entirely accurate. 
+[JFR (or JDK Flight Recorder)](https://en.wikipedia.org/wiki/JDK_Flight_Recorder) is the primary source of profiling data for the JVM.
+
+While it might seem that JFR lacks support for profiling context or labeling, it's not entirely accurate. 
 JFR has an API to create custom events where one can include any context information. However, this doesn't apply 
-to built-in native events, which are crucial for understanding JVM behavior. Ideally, profiling context should be 
-handled uniformly, avoiding the need for each application author to design it for their events.
+to compiled-in events like e.g. MonitorWait or ThreadPark, which are crucial for understanding JVM behavior. 
+Ideally, profiling context should be handled uniformly, avoiding the need for each application author to design it for their events.
 
 ## Challenges and Solutions
 Working around JFR's lack of profiling context in our profiler implementation proved challenging. Many ideas seemed 
@@ -61,8 +61,8 @@ The requirements were simple:
 - Setting and getting context must be cheap in terms of execution overhead
 
 #### Implementation
-The context's implementation is anchored in a solution devised by my colleague, [Richard Startin](richardstartin@github.io). 
-He may delve deeper into this topic in a future post, but for now, here's a brief overview:
+Here you can find a brief overview of the implementation. For more details and interesting use cases you can check out
+[Richard Startin's blog](https://richardstartin.github.io).
 
 1. **Base Structure**: The core of the implementation is a sparse map. Each entry in this map is keyed by a thread ID and linked to a 64-byte context block.
 2. **Context Block Design**: At the outset of each profiling session, the slots within these context blocks are assigned specific meanings, such as `traceid`, `spanid`, or `rest_endpoint`. Once set, each slot in the block points to a dictionarized string.
@@ -103,10 +103,10 @@ Its user-defined nature (versus pre-set attributes) means it's versatile. It can
 the real user problems, such as [Understanding Request Latency](https://richardstartin.github.io/posts/wallclock-profiler).
 
 However, having the context maintained externally, in a profiler library as opposed to it being an integral part of JFR
-is still bothering us. We still can't contextualize the really interesting native JFR events and we must maintain
-our own profiling library based on not-exactly-supported AsyncGetCallTrace API (there is [JEP 435](https://bugs.openjdk.org/browse/JDK-8284289)
-meaning to introduce a better alternative to AsyncGetCallTrace, but it is not sure if and when it will happen).
+remains a limiting factor. We still can't contextualize the really interesting compiled-in JFR events, and we must maintain
+our own profiling library based on not-exactly-supported AsyncGetCallTrace API - there is [JEP 435](https://bugs.openjdk.org/browse/JDK-8284289)
+meaning to introduce a better alternative to AsyncGetCallTrace, but it is not sure if and when it will happen.
 
-With all this said it is very obvious that having the first class support of the profiling context directly in JFR
+With all this said it is very obvious that having first class support of the profiling context directly in JFR
 would be more than welcome. And I am going to talk about my proposal for getting the Profiling Context API to JFR in my
 next blog post.
