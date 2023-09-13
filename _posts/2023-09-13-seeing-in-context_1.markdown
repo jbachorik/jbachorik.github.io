@@ -1,7 +1,7 @@
 ---
 layout: post
 title:  "Seeing In Context: A journey to contextualized JFR profiles (part 1)"
-date:   2023-09-07 09:44:14 +0200
+date:   2023-09-13 17:30:00 +0200
 categories: java jvm jfr openjdk profiling performance
 ---
 
@@ -68,7 +68,7 @@ Here you can find a brief overview of the implementation. For more details and i
 2. **Context Block Design**: At the outset of each profiling session, the slots within these context blocks are assigned specific meanings, such as `traceid`, `spanid`, or `rest_endpoint`. Once set, each slot in the block points to a dictionarized string.
 3. **Java-Native Interoperability**: As the profiler library is native, it's crucial to maintain fast interoperability between Java and the native environment while minimizing JNI costs. To achieve this, we've mapped context blocks to direct byte buffers. This configuration allows seamless writing from Java and reading from the native side.
 
-![Shared Memory Context]({{ site.baseurl }}/assets/images/2023-09-08-seeing-in-context/img_1.png)
+![Shared Memory Context]({{ site.baseurl }}/assets/images/2023-09-13-seeing-in-context_1/img_1.png)
 
 #### Java API
 This is the low level raw Java API to interact with the profiling context in the Datadog profiler library.
