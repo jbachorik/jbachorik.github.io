@@ -23,18 +23,34 @@ email: j.bachorik@gmail.com
 description: >- # this means to ignore newlines until "baseurl:"
   Mostly Java/JVM stuff. Focused on serviceability, observability and performance.
   All opinions are my own and I am not selling any of them.
-baseurl: "/blog" # the subpath of your site, e.g. /blog
 url: "" # the base hostname & protocol for your site, e.g. http://example.com
 twitter_username: yardus
 github_username:  jbachorik
+
+markdown: kramdown
 
 # Build settings
 theme: minima
 plugins:
   - jekyll-feed
+  - jekyll-redirect-from
+  - jekyll-twitter-plugin
+
+permalink: /posts/:title
 
 include:
   - assets/image/
+
+header_pages:
+  - about.md
+
+defaults:
+  - scope:
+      path: ""
+      type: "posts"
+collections:
+  posts:
+    output: true
 
 
 # Exclude from processing.
