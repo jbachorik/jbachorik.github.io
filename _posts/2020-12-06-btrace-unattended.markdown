@@ -43,7 +43,7 @@ This command will list any probes which were deployed and the clients left them 
 
 ### List probes from command line
 Use `btrace -lp <pid>` to list the probes in detached mode in a particular JVM
-!['List Probes' Result]({{ site.baseurl }}/assets/images/2020-12-06-btrace-unattended/list_probes_rslt.png)
+!['List Probes' Result]({{ site.baseurl }}/assets/images/2020-12-06-btrace-unattended/list_results.png)
 
 ### Reconnect to a detached probe
 Use `btrace -r <probe id> <pid>` to reconnect to a detached probe and start receiving probe data.
