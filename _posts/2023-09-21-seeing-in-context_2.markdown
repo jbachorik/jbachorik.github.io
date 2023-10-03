@@ -161,7 +161,10 @@ when it is unmounted and restoring the context when it is mounted. This comes as
 to maintain the context copy. On the other hand, the memory overhead would be quite negligible compared to the heap-persisted
 virtual thread stack. The context copy cost would be dominated by memory bandwidth and the mechanical sympathy of the
 context placement. For now, the virtual thread support should be considered as highly experimental and will definitely
-be adjusted when the JEP related discussion starts.
+be adjusted when the JEP related discussion starts. Also, the current implementation throws off some JVMTI asserts about
+frame counts where, apparently, although virtual threads are implemented in Java calling an arbitrary Java method from
+the transition handling code will break the assumptions. This all will have to be resolved before moving on with the context
+implementation.
 
 ##### What about Scoped Values?
 
