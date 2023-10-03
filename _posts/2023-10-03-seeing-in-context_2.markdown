@@ -1,7 +1,7 @@
 ---
 layout: post
 title:  "Seeing In Context: A journey to contextualized JFR profiles (part 2)"
-date:   2023-10-03 17:30:00 +0200
+date:   2023-10-03 15:00:00 +0200
 categories: java jvm jfr openjdk profiling performance
 ---
 
