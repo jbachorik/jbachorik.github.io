@@ -50,8 +50,8 @@ In order to bring some structure into various contexts across the application th
 a similar way to how the custom JFR events are described.
 {% highlight java %}
 @Name("tracer-context") // the context type name
-@Description("Tracer context type, comprised of [traceid, spanid] touple") // description
-public clas TracerContextType extends ContextType {
+@Description("Tracer context type, comprised of [traceid, spanid] tuple") // description
+public class TracerContextType extends ContextType {
 
   // attributes are defined as plain public fields annotated by at least @Name annotation
   @Name("traceid")
