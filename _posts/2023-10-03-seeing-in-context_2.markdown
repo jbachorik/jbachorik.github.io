@@ -202,6 +202,6 @@ in the JFR Context API.
 The main point of the proposed API is to be as similar to the custom JFR Event API as possible to allow users to quickly 
 grasp the concepts and start being productive in no time.
 
-I would love to hear some feedback on this proposal - you can reach me on X where my handle is [@yardus](https://twitter.com/yardus).
+I would love to hear some feedback on this proposal - you can reach me on X where my handle is [@BachorikJ](https://twitter.com/BachorikJ).
 
 And just to reiterate, the prototype is available [here](https://github.com/DataDog/openjdk-jdk/tree/jb/jfr_context)

@@ -24,7 +24,7 @@ description: >- # this means to ignore newlines until "baseurl:"
   Mostly Java/JVM stuff. Focused on serviceability, observability and performance.
   All opinions are my own and I am not selling any of them.
 url: "" # the base hostname & protocol for your site, e.g. http://example.com
-twitter_username: yardus
+twitter_username: BachorikJ
 github_username:  jbachorik
 
 markdown: kramdown
