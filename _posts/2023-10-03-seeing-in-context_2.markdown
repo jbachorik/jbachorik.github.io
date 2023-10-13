@@ -206,5 +206,5 @@ I would love to hear some feedback on this proposal - you can reach me on X wher
 
 And just to reiterate, the prototype is available [here](https://github.com/DataDog/openjdk-jdk/tree/jb/jfr_context)
 
-
-_[Continue to part 3]({% post_url 2023-10-13-seeing-in-context_3 %})_
+---
+You can _[continue to part 3]({% post_url 2023-10-13-seeing-in-context_3 %})_ or join the _[discussion](https://github.com/jbachorik/jbachorik.github.io/discussions/5)_.

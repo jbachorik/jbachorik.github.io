@@ -1,7 +1,7 @@
 ---
 layout: post
 title:  "Seeing In Context: A journey to contextualized JFR profiles (part 3)"
-date:   2023-10-12 15:00:00 +0200
+date:   2023-10-13 15:00:00 +0200
 categories: java jvm jfr openjdk profiling performance
 ---
 
@@ -130,3 +130,6 @@ gather initial feedback about the feasibility of this approach and to serve as t
 
 As always, if you wish to try out the API or consider adding an integration for your favorite tracer, please reach out 
 to me on X via [@BachorikJ](https://twitter.com/BachorikJ).
+
+---
+You can join the _[discussion](https://github.com/jbachorik/jbachorik.github.io/discussions/5)_.
