@@ -10,7 +10,7 @@ categories: java jvm jfr openjdk profiling performance
 
 # Applying context to JFR events
 
-In the [previous blog](https://jbachorik.github.io/posts/seeing-in-context_1) I talked about the reasons we want to have
+In the [previous blog post]({% post_url 2023-09-13-seeing-in-context_1 %}) I talked about the reasons we want to have
 the profiling (well, observability, in general) data contextualized, how we, at Datadog, tried different approaches to
 recording the context and ended up with something which is more than acceptable.
 
@@ -205,3 +205,6 @@ grasp the concepts and start being productive in no time.
 I would love to hear some feedback on this proposal - you can reach me on X where my handle is [@BachorikJ](https://twitter.com/BachorikJ).
 
 And just to reiterate, the prototype is available [here](https://github.com/DataDog/openjdk-jdk/tree/jb/jfr_context)
+
+
+_[Continue to part 3]({% post_url 2023-10-13-seeing-in-context_3 %})_
