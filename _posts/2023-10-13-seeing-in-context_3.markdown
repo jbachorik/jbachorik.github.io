@@ -130,6 +130,3 @@ gather initial feedback about the feasibility of this approach and to serve as t
 
 As always, if you wish to try out the API or consider adding an integration for your favorite tracer, please reach out 
 to me on X via [@BachorikJ](https://twitter.com/BachorikJ).
-
----
-You can join the _[discussion](https://github.com/jbachorik/jbachorik.github.io/discussions/5)_.

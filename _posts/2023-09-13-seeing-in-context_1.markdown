@@ -110,6 +110,3 @@ meaning to introduce a better alternative to AsyncGetCallTrace, but it is not su
 With all this said it is very obvious that having first class support of the profiling context directly in JFR
 would be more than welcome. And I am going to talk about my proposal for getting the Profiling Context API to JFR in my
 next blog post.
-
----
-You can _[continue to part 2]({% post_url 2023-10-03-seeing-in-context_2 %})_ or join the [discussion](https://github.com/jbachorik/jbachorik.github.io/discussions/5)_.
