@@ -107,7 +107,7 @@ ctx.unset();
 Since registering the context before JFR is initialized can be really tricky, especially with the possibility of starting
 JFR recording at the same time the application starts up, there is an alternative method to allow just-in-time registration
 of context types.
-This approach is based on `ServiceLoader` and the actual service type is `ContextRegistration`.
+This approach is based on [ServiceLoader](https://docs.oracle.com/javase/8/docs/api/java/util/ServiceLoader.html) and the actual service type is `ContextRegistration`.
 
 {% highlight java %}
 public class MyContextRegistration implements ContextType.Registration {
