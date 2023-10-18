@@ -20,7 +20,7 @@ the proposed JFR API must allow for an easy, cheap, and non-intrusive integratio
 
 ## Searching for integration points 
 
-A brief look at [OpenTelemetry](https://opentelemetry.io/) and  [DD Tracer](https://github.com/DataDog/dd-trace-java) confirmed 
+A brief look at  [OpenTelemetry](https://opentelemetry.io/) and  [DD Tracer](https://github.com/DataDog/dd-trace-java) confirmed 
 that they are already dealing with the context problem in a broader way than what the proposed JFR API is supposed to tackle. 
 Namely, the distributed tracers are taking care of maintaining the context stack and propagating the context around via extensive 
 instrumentation. And the propagation is not restricted to the same JVM but, as the 'distributed' part suggests, they are
@@ -106,7 +106,8 @@ access.unset(); // deactivation is not instance specific
 {% endhighlight %}
 
 If you want to see the actual working integration, you can find this [draft PR](https://github.com/DataDog/dd-trace-java/pull/6013)
-quite interesting. The PR description contains the guide for building the patched DD tracer agent to run against the patched OpenJDK 21.
+quite interesting. The PR description contains the guide for building the patched DD tracer agent to run against the patched 
+[OpenJDK 21](https://github.com/DataDog/openjdk-jdk21/tree/jb/jfr_context_bp).
 
 The original JFR context prototype had to be backported from OpenJDK 22 because the DD tracer cannot be built and used on 
 OpenJDK 22 due to the lack of support in [ASM](https://asm.ow2.io/). This is because [ASM](https://asm.ow2.io/) can support 
