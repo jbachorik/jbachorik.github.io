@@ -1,7 +1,7 @@
 ---
 layout: post
 title:  "Dude, where's my memory?!"
-date:   2024-04-18 15:00:00 +0200
+date:   2024-04-17 15:00:00 +0200
 categories: java jvm openjdk native
 ---
 
@@ -111,7 +111,7 @@ Once all the data is in, I can use the comparison feature of the Datadog Continu
 allocations at the beginning of the run with the sample at the end of the run. Here is the result:
 
 _Fig1: Live heap profile comparison_
-![live_heap_comparison]({{ site.baseurl }}/assets/images/2024-04-18-stop-that-leak/comparison.png)
+![live_heap_comparison]({{ site.baseurl }}/assets/images/2024-04-17-stop-that-leak/comparison.png)
 
 The comparison is very intuitive, at least in my opinion. The red bars represent the increase of the retained allocations
 from that particular allocation site. The green bars represent the decrease of the retained allocations. The blue bars are
