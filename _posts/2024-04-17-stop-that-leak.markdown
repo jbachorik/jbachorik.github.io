@@ -1,7 +1,7 @@
 ---
 layout: post
 title:  "Dude, where's my memory?!"
-date:   2024-04-17 00:00:00 +0200
+date:   2024-04-17 10:00:00 +0200
 categories: java jvm openjdk native
 ---
 
