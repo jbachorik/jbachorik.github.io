@@ -1,3 +1,11 @@
+---
+layout: post
+title:  "Github Actions Permission Nightmare"
+date:   2025-07-26 00:00:00 +0200
+categories: github openjdk ci
+tags: github actions openjdk
+---
+
 # The GitHub Actions Permission Nightmare: A Journey Through Documentation Hell
 
 *Or: How I Spent Hours Building a Sophisticated Solution to Automate Clicking a Button (Spoiler: It Still Doesn't Work)*
