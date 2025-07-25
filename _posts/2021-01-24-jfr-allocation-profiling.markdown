@@ -56,7 +56,9 @@ Unfortunately, this simple approach would not work for JFR events - each event i
 
 JFR adaptive sampler provides a generic support for controlling emission rate of JFR events. It is an 'online' sampler - meaning that the decision whether an event is to be sampled or not is done immediately without requiring any additional data structures like it is in the case of reservoir sampling. At the same time the sampler dynamically adjusts the effective sampling rate in order not to cross the maximum emission rate within the given time range (eg. per second) but still provide a good number of samples in 'quieter' periods.
 
-Conceptually, the adaptive sampler is based on [PID controller](https://en.wikipedia.org/wiki/PID_controller) theory although it is missing the derivational part making it more similar to [PI controller](https://en.wikipedia.org/wiki/PID_controller#PI_controller). Also, due to the additional limits imposed by the fact that the sampler is going to be used in latency sensitive parts of JVM the implementation had to be embellished with several heuristics not found in the standard [discrete implementation](https://en.wikipedia.org/wiki/PID_controller#Discrete_implementation).
+Conceptually, the adaptive sampler is based on [PID controller](https://en.wikipedia.org/wiki/PID_controller) theory (an idea my colleague [Marcus](https://hirt.se/) borrowed from his robotics hobby), although it is missing the derivational part making it more similar to [PI controller](https://en.wikipedia.org/wiki/PID_controller#PI_controller). Also, due to the additional limits imposed by the fact that the sampler is going to be used in latency sensitive parts of JVM the implementation had to be embellished with several heuristics not found in the standard [discrete implementation](https://en.wikipedia.org/wiki/PID_controller#Discrete_implementation).
+
+The sampler and the idea was proved successfull in the [Datadog Exception profiler](https://github.com/DataDog/dd-trace-java/pull/1297).
 
 #### Quantization
 
