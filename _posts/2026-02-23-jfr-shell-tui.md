@@ -20,14 +20,15 @@ Starting with version **0.14.0**, jfr-shell ships with a full-screen terminal UI
 ## Getting In
 
 ```bash
-jfr-shell --tui recording.jfr
+jfr-shell --tui
+jfr> open recording.jfr
 ```
 
-That's it. Same queries, same JfrPath, same everything. The difference is that the output no longer scrolls off into the void.
+That's it. Launch the TUI, open a recording. Same queries, same JfrPath, same everything. The difference is that the output no longer scrolls off into the void.
 
 <!-- SCREENSHOT: tui-overview.png
-     Capture: Launch jfr-shell --tui with a recording loaded.
-     Run a query like: events/jdk.ExecutionSample | groupBy(thread/name)
+     Capture: Launch jfr-shell --tui, then open a recording.
+     Run a query like: events/datadog.ExecutionSample | groupBy(eventThread.javaName)
      Show the full TUI layout: status bar at top, table results in the middle,
      command input at the bottom, tips line and hints bar visible.
      Terminal should be at least 120x40 for a good shot. -->
@@ -57,13 +58,13 @@ By default each command is rendered into a scratch-tab — it will get replaced 
 
 ## Search and Filter
 
-Press `/` and start typing. The table filters in real time - only rows containing your search term are shown, with matches highlighted in yellow. The status line shows the hit count. Press `Enter` to lock the filter, `Esc` to cancel.
+Press `Ctrl+F` and start typing. The table filters in real time - only rows containing your search term are shown, with matches highlighted in yellow. The status line shows the hit count. Press `Enter` to lock the filter, `Esc` to cancel.
 
 This works the same way you would expect from any reasonable tool: case-insensitive, substring match, instant feedback.
 
 <!-- SCREENSHOT: tui-search.png
-     Capture: Run a query with many rows (eg. events/jdk.ExecutionSample | groupBy(thread/name)).
-     Press / and type a partial thread name (e.g. "Fork" or "GC").
+     Capture: Run a query with many rows (eg. events/datadog.ExecutionSample | groupBy(eventThread.javaName)).
+     Press Ctrl+F and type a partial thread name (e.g. "Fork" or "GC").
      Show the search bar active with the filter applied,
      matching rows visible, and the match count displayed. -->
 ![Live search and filter]({{ site.baseurl }}/assets/images/2026-02-23-jfr-shell-tui/tui-search.png)
@@ -80,40 +81,44 @@ This is where the TUI earns its keep. In the old REPL, inspecting a complex even
 
 <!-- SCREENSHOT: tui-detail.png
      Capture: Run a query that produces rows with complex/nested data.
-     Good candidates: events/jdk.ExecutionSample (has stackTrace field),
-     or events/jdk.ObjectAllocationSample.
+     Good candidates: events/datadog.ExecutionSample (has stackTrace field),
+     or events/datadog.ObjectSample.
      Select a row and press Enter to open the detail pane.
      Show the split view: table on left, detail tree on right. -->
 ![Detail pane with split view]({{ site.baseurl }}/assets/images/2026-02-23-jfr-shell-tui/tui-detail.png)
 
-Detail subtabs (switch with `[` and `]`) let you inspect different aspects of the selected row. `Shift+Tab` moves focus between the results table and the detail pane. The detail pane has its own scrolling, its own search (type `/` while focused there), and its own cursor navigation.
+Detail subtabs (switch with `[` and `]`) let you inspect different aspects of the selected row. `Shift+Tab` moves focus between the results table and the detail pane. The detail pane has its own scrolling, its own search (`Ctrl+F` while focused there), and its own cursor navigation.
+
+## Event Browser
+
+Type `events` to see every event type present in the recording, listed as a navigable table with event counts. This is the starting point for exploring an unfamiliar recording - you see what's there before writing any queries.
+
+<!-- SCREENSHOT: tui-events.png
+     Capture: Run: events
+     Show the event type listing with counts. -->
+![Event browser]({{ site.baseurl }}/assets/images/2026-02-23-jfr-shell-tui/tui-events.png)
 
 ## Constant Pool Browser
 
 The constant pool browser is one of those features that sounds niche until you need it - and then it's the only thing that matters.
 
-Type `constants jdk.types.Symbol` (or any CP type) and the TUI opens a split view: a sidebar listing all constant pool types on the left, and the entries for the selected type on the right. Navigate the sidebar with arrow keys, press `Enter` to view entries. Press `/` in the sidebar to filter the type list.
+Type `constants` to see all constant pool types. Select a type and press `Enter` to browse its entries, or type `constants jdk.types.Symbol` to jump straight to a specific type. Navigate with arrow keys, press `Ctrl+F` to filter the type list.
 
 For large constant pools, entries are paginated automatically so the UI stays responsive even when a recording has hundreds of thousands of entries.
 
 <!-- SCREENSHOT: tui-browser.png
-     Capture: Open a recording and run: constants jdk.types.Symbol
-     (or another CP type that has many entries).
-     Show the browser split: type sidebar on the left, entries on the right.
-     Ideally with a few types visible in the sidebar. -->
+     Capture: Run: constants
+     Show the constant pool type listing. -->
 ![Constant pool browser]({{ site.baseurl }}/assets/images/2026-02-23-jfr-shell-tui/tui-browser.png)
 
-## Metadata Tree
+## Metadata
 
-`show metadata/type --tree` renders the recording's type system as a collapsible tree with Unicode box-drawing characters. Field types, dimensions, annotations - it's all there, structured instead of flattened into a table.
-
-Add `--depth N` to control how deep the recursion goes. The tree renderer tracks visited types to avoid infinite loops on recursive structures.
+`metadata` lists every event, type and annotation defined in the recording as a navigable table. Field names, types, dimensions - all browsable without leaving the TUI.
 
 <!-- SCREENSHOT: tui-metadata.png
-     Capture: Run: show metadata/type --tree --depth 3
-     Show the tree output with Unicode guide lines (├─ ┴ etc),
-     field names, types, and annotations visible. -->
-![Metadata tree view]({{ site.baseurl }}/assets/images/2026-02-23-jfr-shell-tui/tui-metadata.png)
+     Capture: Run: metadata
+     Show the metadata table with event types listed. -->
+![Metadata view]({{ site.baseurl }}/assets/images/2026-02-23-jfr-shell-tui/tui-metadata.png)
 
 ## Session Switching
 
@@ -143,9 +148,11 @@ Combined with `Shift+Up/Down` for simple history scrolling, you never have to re
 
 Press `@` to open a popup listing every field and value of the currently selected row. Arrow to the one you want, press Enter — the value is inserted into the command input and copied to the clipboard. Useful for grabbing a thread name, stack trace hash, or constant pool ID without retyping it.
 
+![Cell picker popup]({{ site.baseurl }}/assets/images/2026-02-23-jfr-shell-tui/tui-picker.png)
+
 ## The Keyboard Cheat Sheet
 
-The hints bar at the bottom of the screen adapts to the current focus. When you're in the results pane, it shows shortcuts like `↑↓:row  <>:sort col  /:search  Ctrl+P:pin`. When you're in the command input, it shows `Enter:run  Tab:complete  Ctrl+R:search history`. It's always telling you what's available without you having to memorize anything.
+The hints bar at the bottom of the screen adapts to the current focus. When you're in the results pane, it shows shortcuts like `↑↓:row  <>:sort col  Ctrl+F:search  Ctrl+P:pin`. When you're in the command input, it shows `Enter:run  Tab:complete  Ctrl+R:search history`. It's always telling you what's available without you having to memorize anything.
 
 Here's the full set:
 
@@ -156,14 +163,14 @@ Here's the full set:
 | Global | `Ctrl+E` | Export to CSV |
 | Global | `Ctrl+R` | History search |
 | Global | `Alt+s` | Session picker |
-| Results | `/` | Search/filter |
+| Results | `Ctrl+F` | Search/filter |
 | Results | `<` / `>` | Sort by column |
 | Results | `Alt+r` | Reverse sort |
 | Results | `Enter` | Open detail pane |
 | Results | `Alt+d` | Jump to detail |
 | Results | `Shift+Tab` | Cycle focus |
 | Detail | `[` / `]` | Switch subtabs |
-| Detail | `/` | Search in detail |
+| Detail | `Ctrl+F` | Search in detail |
 | Detail | `Alt+r` | Jump to results |
 | Input | `Tab` | Completion |
 | Input | `@` | Cell picker |
@@ -185,11 +192,12 @@ No external GUI dependencies. No Electron. No web browser. Just ANSI escape code
 
 ```bash
 # JBang (easiest)
-jbang jfr-shell@btraceio --tui recording.jfr
+jbang jafar-shell@btraceio --tui
+jfr> open recording.jfr
 
 # Or build from source
 ./gradlew :jfr-shell:shadowJar
-java -jar jfr-shell/build/libs/jfr-shell-*-all.jar --tui recording.jfr
+java -jar jfr-shell/build/libs/jfr-shell-*-all.jar --tui
 ```
 
 If you have been using jfr-shell in REPL mode and getting by just fine, the TUI won't change what you can do. It changes how it feels to do it. Queries that used to involve scrolling, re-running, and squinting now involve pointing and pressing Enter.
@@ -198,4 +206,4 @@ The REPL is still there, unchanged, for scripts and non-interactive use. `--tui`
 
 ---
 
-*jfr-shell 0.14.0 is available on [Maven Central](https://central.sonatype.com/) and via [JBang](https://jbang.dev). Source on [GitHub](https://github.com/jbachorik/jafar).*
+*jfr-shell 0.14.2 is available on [Maven Central](https://central.sonatype.com/) and via [JBang](https://jbang.dev). Source on [GitHub](https://github.com/jbachorik/jafar).*
