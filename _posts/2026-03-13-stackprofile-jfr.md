@@ -109,6 +109,20 @@ The two operators complement each other. Neither replaces the other.
 
 Use `flamegraph` when you need to understand call paths and caller-callee relationships. Use `stackprofile` when you need to understand temporal behavior and thread affinity.
 
+## Prior Art and How stackprofile Differs
+
+The idea of adding a time axis to profiling data is not new. Several tools have tried different approaches:
+
+- **[Flame Charts](https://www.polarsignals.com/blog/posts/2025/05/28/flamecharts-the-time-aware-sibling-of-flame-graphs)** (Chrome DevTools, Polar Signals) preserve temporal ordering by not merging stacks at all. Every individual call is shown in time sequence. This is faithful to the recording, but for a two-minute JFR with tens of thousands of samples, the result is too noisy to navigate. You get time, but you lose the ability to spot patterns.
+
+- **[Differential Flame Graphs](https://www.brendangregg.com/flamegraphs.html)** (Brendan Gregg) compare two profiles, A and B, coloring frames red or blue based on the delta. Great for before/after comparisons, but they only answer "did this method get hotter or colder between these two snapshots?" They cannot show a continuous temporal distribution within a single recording.
+
+- **[dotTrace Timeline Profiling](https://blog.jetbrains.com/dotnet/2015/01/29/overview-of-dottrace-6-timeline-profiling/)** (JetBrains) gives a full thread-level timeline with call stacks at each point. Powerful, but .NET-only, and it is a GUI tool rather than a composable pipeline operator.
+
+- **[binjr](https://binjr.eu/blog/2023/08/the-benefit-of-wall-clock-time-data-in-method-profiling/)** can browse JFR method profiling events as time series and show histogram density distributions. It gives you the temporal view, but it works at the individual event level rather than aggregating into a call tree.
+
+`stackprofile` takes a different path. It merges stacks like a flamegraph (keeping the output compact and navigable) but annotates every node in the tree with a bucketed time distribution and per-thread breakdown. You get the structural clarity of a merged call tree plus the temporal insight of a flame chart, without the noise of either extreme.
+
 ## For AI Agents Too
 
 `stackprofile` is also exposed as an MCP tool (`jfr_stackprofile`) through jfr-mcp. The MCP version returns structured JSON with numeric fields for every frame: `totalPct`, `selfPct`, `pattern`, `category`, `timeBuckets` array, and `threadCounts` map. This makes it straightforward for an AI agent to programmatically identify bursty hotspots, detect N+1 patterns, or compare thread affinity across frames without parsing sparklines.
@@ -133,7 +147,7 @@ The plain CLI gives you the data. The TUI makes it navigable. MCP makes it query
 
 ```bash
 # Install via JBang, open a recording
-jbang jfr-shell@btraceio -f recording.jfr
+jbang jfr-shell@btraceio -f recording.jfr --tui
 
 # Top-down call tree with temporal bucketing
 jfr> events/jdk.ExecutionSample | stackprofile()
