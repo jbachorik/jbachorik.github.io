@@ -139,6 +139,8 @@ Then ask Claude to investigate temporal CPU patterns, and it will use `jfr_stack
 
 In **TUI mode**, the results are color-coded by category. Normal frames stay neutral, hotspots get highlighted, and steady-hotspots are immediately visible. You can jump directly to the next hotspot without scrolling through hundreds of normal frames. When a recording has thousands of frames, that navigation alone saves real time.
 
+![stackprofile in TUI mode](/assets/images/2026-03-13-stackprofile-jfr/tui-screenshot.png)
+
 Through **MCP**, an AI agent gets structured JSON with numeric fields it can reason over programmatically. It can scan for steady-hotspots, compare thread affinity across frames, and detect N+1 patterns without parsing visual output. The combination of `jfr_stackprofile` with `jfr_flamegraph` and `jfr_hotmethods` gives the agent three complementary views of the same CPU data.
 
 The plain CLI gives you the data. The TUI makes it navigable. MCP makes it queryable by machines.
