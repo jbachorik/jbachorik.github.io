@@ -114,7 +114,16 @@ public class CheckoutSpans {
 }
 ```
 
-Point `btrace.otel.endpoint` at a collector (the default is `http://localhost:4318`), give it a `btrace.otel.service.name`, and the spans show up in whatever backend you already run. No SDK in the application, no agent other than BTrace, and the probe can be removed the same way it was added. Spans and counters are queued on the hot path and shipped by a background exporter thread over OTLP/HTTP in batches, so the instrumented method pays for an enqueue and nothing else.
+The extension runs inside the traced JVM, so it is configured there, with plain system properties on the application's command line. Tell it where your OTLP/HTTP collector listens and what to call the service, allow the extension, and start the application:
+
+```sh
+java -javaagent:btrace.jar=allowExtensions=btrace-otel \
+     -Dbtrace.otel.endpoint=http://otel-collector:4318 \
+     -Dbtrace.otel.service.name=order-service \
+     MyApp
+```
+
+The endpoint defaults to `http://localhost:4318`, the service name to `btrace`, and the exporter posts to the standard `/v1/traces` and `/v1/metrics` paths under that base URL. Deploy the probe above with `btrace <PID> CheckoutSpans.java` and the spans show up in whatever backend you already run. No SDK in the application, no agent other than BTrace, and the probe can be removed the same way it was added. Spans and counters are queued on the hot path and shipped by a background exporter thread over OTLP/HTTP in batches, so the instrumented method pays for an enqueue and nothing else.
 
 Now the uncomfortable part. Look at what that extension needs in order to work: an HTTP client, a JSON encoder, a queue, and a daemon thread that opens network connections *from inside the JVM you are observing*. In 2.x there was exactly one way to get code like that into a probe: the `libs=` profiles, which appended jars to the global classpath of the target application and hoped nothing conflicted. A "safe" tracing tool mutating the application classpath so that it can open sockets. I could never write that sentence with a straight face, so the profiles are gone, and I do not miss them.
 
@@ -122,11 +131,7 @@ The replacement is the extension framework, and OTel is the reason it looks the 
 
 An extension is a pair of jars. A small API jar (the `OTel` interface, nothing else) lands on the bootstrap classpath so probes can link against it. The implementation (the HTTP code, the queues, the exporter thread) is loaded in isolation and bridged to the probe through an `invokedynamic` call site. The application never sees it, and the implementation never sees the application's classes either. `@Injected` is the whole API surface from the script's point of view.
 
-Then permissions. Every extension declares what it needs, and `btrace-otel` declares `NETWORK`. That is a privileged permission, and privileged extensions do not link unless the *operator* of the target JVM allows it, either as an agent argument or in a policy file:
-
-```sh
-java -javaagent:btrace.jar=allowExtensions=btrace-otel MyApp
-```
+Then permissions. Every extension declares what it needs, and `btrace-otel` declares `NETWORK`. That is a privileged permission, and privileged extensions do not link unless the *operator* of the target JVM allows it, either as an agent argument (the `allowExtensions=btrace-otel` in the command above) or in a policy file.
 
 There is deliberately no client-side flag. The person deploying a probe does not get to grant themselves a network socket on a JVM they do not own. The BTrace Gradle plugin even computes most of an extension's permission set by statically scanning the implementation for JDK APIs that imply one, so an extension cannot quietly forget to mention that it uses reflection or threads. When an extension is blocked, the agent says so, and says why:
 
