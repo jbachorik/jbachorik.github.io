@@ -171,7 +171,48 @@ Note the `optional = true`. When the operator has not allowed the extension, the
 
 OTel and metrics are two of the extensions that ship with 3.0. The others are StatsD export, runtime contracts (latency budgets and rate limits checked on live calls), a handful of utilities, and three aimed at AI workloads: LLM call tracing (tokens, latency, estimated cost per model), RAG quality (vector store query latency and similarity scores), and a GPU bridge for ONNX Runtime, DJL and TensorFlow inference timing. The AI ones exist because "which method is slow" has, for a lot of applications, turned into "which model call is slow and how many tokens did it burn". The answer is produced the same way as everywhere else in this post: a probe on the client method, with nothing added to the application and nothing left behind when the probe goes.
 
-Around all of this there is a `btracex` CLI (with a small TUI) to list and inspect extensions and to edit the policy, an [extension registry](https://github.com/btraceio/btrace-extensions) for third-party ones, and a `io.btrace.fat-agent` Gradle plugin that bakes BTrace plus whatever extensions and startup probes you want into a single `-javaagent` jar. That last one exists for the Spark/Hadoop/Kubernetes crowd who do not want to manage a `$BTRACE_HOME` on every node.
+Around all of this there is a `btracex` CLI (with a small TUI) to list and inspect extensions and to edit the policy, and an [extension registry](https://github.com/btraceio/btrace-extensions) for third-party ones.
+
+## One jar, part two: the fat agent
+
+Extensions on disk are fine on a laptop. They are not fine on a Spark executor, a Hadoop node, or a distroless container, where there is no `$BTRACE_HOME`, no `extensions/` directory, no shared filesystem, and nobody who wants to copy anything anywhere. Those environments can cope with exactly one thing: a `-javaagent` jar.
+
+So 3.0 ships a Gradle plugin, `io.btrace.fat-agent`, that builds that one jar:
+
+```groovy
+plugins {
+    id 'io.btrace.fat-agent' version '3.0.0'
+}
+
+btraceFatAgent {
+    baseName = 'demo-btrace-agent'
+    btraceVersion = '3.0.0'
+
+    embedExtensions {
+        file('btrace-otel.zip')          // an extension package
+        project(':my-custom-extension')  // or a subproject in the same build
+        maven('com.acme:acme-ext:1.2')   // or published Maven coordinates
+    }
+}
+```
+
+`./gradlew fatAgentJar` stages the masked BTrace engine, then every extension you listed, and writes a jar whose manifest still says `Premain-Class: io.btrace.boot.Loader`, so it attaches like plain `btrace.jar`.
+
+The interesting part is how the extensions go in, because it is the classdata masking trick again, applied one level up. An extension's API classes (the interfaces a probe links against) are copied into the jar as regular `.class` files, so the bootstrap loader sees them through `Boot-Class-Path`. The implementation classes are renamed to `.classdata` and sit next to them at the jar root, where the JVM ignores them and a small `ClassDataLoader` resolves them by exact class name when the extension is first used. Each embedded extension also gets a `META-INF/btrace-extensions/<id>/extension.properties`, and the manifest carries a `BTrace-Embedded-Extensions` list that the agent reads at startup instead of scanning a directory. Same isolation as an installed extension, just with the directory folded into the jar.
+
+Two details I like. First, the published `io.btrace:btrace:3.0.0` artifact *is* a fat agent: it is built by this same plugin and already embeds the bundled extension set, which is why `jbang` users get `MetricsService` without installing anything. Your own `embedExtensions` entries are deduplicated by id against that list, so the plugin is really for adding what the engine does not carry: your own extension, or a third-party one. Second, embedding does not launder permissions. The plugin reads `BTrace-Extension-Permissions` from the extension's API jar manifest, refuses to build at all if the attribute is missing rather than defaulting to "no permissions", and copies it into the embedded metadata. At runtime the embedded extension goes through exactly the same privileged gate as a filesystem one, so the deploy line still has to say what is allowed:
+
+```sh
+java -javaagent:demo-btrace-agent.jar=allowExtensions=btrace-otel MyApp
+```
+
+You can also bake probes in. A `bundledProbes { }` block stages compiled probe classes under `META-INF/btrace-probes/`, and an agent argument selects which one starts with the JVM:
+
+```sh
+java -javaagent:demo-btrace-agent.jar=probes=com.example.OrderStartupProbe,output=stdout MyApp
+```
+
+Probe names are exact binary names, and a name that is not in the jar fails startup loudly rather than being ignored, which also keeps `probes=` from reaching outside the `META-INF/btrace-probes/` namespace. For a Spark job that means one jar in `spark.executor.extraJavaOptions`, with the extension and the startup probe inside it, and nothing else to distribute. The full walkthrough, including what the staged jar looks like when you `unzip -l` it, is [tutorial 08](https://github.com/btraceio/btrace/blob/develop/docs/tutorials/08-fat-agent.md).
 
 ## Attaching to production without sweating
 
