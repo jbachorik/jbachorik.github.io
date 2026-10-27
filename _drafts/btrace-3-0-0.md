@@ -131,7 +131,7 @@ The replacement is the extension framework, and OTel is the reason it looks the 
 
 An extension is a pair of jars. A small API jar (the `OTel` interface, nothing else) lands on the bootstrap classpath so probes can link against it. The implementation (the HTTP code, the queues, the exporter thread) is loaded in isolation and bridged to the probe through an `invokedynamic` call site. The application never sees it, and the implementation never sees the application's classes either. `@Injected` is the whole API surface from the script's point of view.
 
-Then permissions. Every extension declares what it needs, and `btrace-otel` declares `NETWORK`. That is a privileged permission, and privileged extensions do not link unless the *operator* of the target JVM allows it, either as an agent argument (the `allowExtensions=btrace-otel` in the command above) or in a policy file.
+Then permissions. Every extension declares what it needs, and `btrace-otel` declares `NETWORK` and `THREADS`, one for the socket and one for the exporter thread. Both are privileged permissions, and privileged extensions do not link unless the *operator* of the target JVM allows it, either as an agent argument (the `allowExtensions=btrace-otel` in the command above) or in a policy file.
 
 There is deliberately no client-side flag. The person deploying a probe does not get to grant themselves a network socket on a JVM they do not own. The BTrace Gradle plugin even computes most of an extension's permission set by statically scanning the implementation for JDK APIs that imply one, so an extension cannot quietly forget to mention that it uses reflection or threads. When an extension is blocked, the agent says so, and says why:
 
