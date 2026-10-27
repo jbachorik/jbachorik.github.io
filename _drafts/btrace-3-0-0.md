@@ -299,18 +299,48 @@ Nobody will notice this one, which is the point. The client and the agent used t
 
 Every connection starts with a negotiation: the receiving side looks for the `BTR2` magic prefix and falls back to V1 if it is missing. So a 2.x client talks to a 3.0 agent and vice versa on dynamic attach, with no configuration. The one wrinkle: a 3.0 client connecting to a 2.x agent waits for a V2 reply that never comes before falling back, which costs about 5 seconds on the first connect. If you know the agent is 2.x, `-Dbtrace.comm.protocol=v1` on the client skips the wait.
 
-## Let the robot do it
+## Agentic investigations
 
-I have written about [jfr-mcp](/posts/jfr-mcp-serve) before, so this will not surprise anyone. BTrace has an MCP server, and it now lives in the [btraceio/agent-plugins](https://github.com/btraceio/agent-plugins) repository as the `btrace-observability` plugin, together with a set of skills for latency analysis, failure analysis, probe lifecycle and data safety.
+I have written about [jfr-mcp](/posts/jfr-mcp-serve) before, so the shape of this will not surprise anyone. BTrace has an MCP server, and it lives in the [btraceio/agent-plugins](https://github.com/btraceio/agent-plugins) repository as the `btrace-observability` plugin:
 
 ```text
 /plugin marketplace add btraceio/agent-plugins
 /plugin install btrace-observability@btraceio-agent-plugins
 ```
 
-The server runs through jbang, downloads the single `io.btrace:btrace` jar on first use (the masked jar earning its keep again), and exposes tools to list JVMs, deploy oneliners and scripts, send events and remove probes. You describe a symptom, the assistant writes a probe shaped like `OrderService::* @return if duration>200ms { print method, time }`, attaches it, reads the output, and removes it.
+The server runs through jbang, downloads the single `io.btrace:btrace` jar on first use (the masked jar earning its keep again), and exposes a deliberately short list of tools: list JVMs, deploy a oneliner or a script, send an event, list probes, and detach, exit or stop a probe. Codex and Pi are covered by the same repository.
 
-The part I consider important is that the assistant gets fewer privileges than you have, not more. The MCP tools take a PID, a probe and a port, and nothing else: there is no parameter that turns the verifier off, so the assistant cannot put a JVM into trusted mode even if it wanted to. Privileged extensions still need the operator's policy on the agent side, and the plugin guidance pushes towards narrow probes (an exact method in production, a bounded class for discovery). Read the tool calls, not just the answer. The one thing worth saying no to is an assistant that suggests you run `btrace -u` by hand.
+What makes this more than "an LLM with a shell" is the skill suite that ships with the server. There are eleven skills. One coordinates and the rest are specialists: endpoint diagnostics, latency analysis, failure analysis, oneliner triage, probe lifecycle, data safety, runtime access (SSH, Docker, Kubernetes, sidecars), startup and packaging (fat agents, distroless images), MCP operations, and a migration skill for the retired `libs` profiles. You do not pick them. You ask an incident question in operational language and the coordinator composes them.
+
+### A session, end to end
+
+The repository ships this as [demo 06](https://github.com/btraceio/btrace/tree/develop/demos/06-ai-assistant): the same order service as everywhere else in this post, with `chargeCard` slow on about one call in ten and `validateOrder` throwing on about one order in twelve while the application swallows the exception. Four prompts, in plain English.
+
+**"What Java processes are running on this machine?"** The assistant calls `list_jvms` and comes back with the JVMs, their main classes and whether BTrace is attached to any of them. Nothing is attached yet, and it should not attach anything at this point either.
+
+**"The order service with PID N processes orders and some are slow. Find which method in OrderService is slow and by how much. Keep the probe narrow and remove it when you are done."** The latency skill and the oneliner triage skill kick in. The assistant writes something shaped like
+
+```
+OrderService::* @return if duration>200ms { print method, time }
+```
+
+deploys it with `deploy_oneliner`, reads the stream for a while, and concludes that `chargeCard` takes roughly 250 to 400 ms on about one call in ten and that `processOrder` is slow only because it calls it. Then it calls `exit_probe`, which stops and removes the probe, and says so.
+
+**"Some orders fail and the app swallows the exception. Show me where it is thrown."** An `@error` probe on `validateOrder`, the stack through `processOrder`, and the observation that it happens on roughly one order in twelve. Method names and stacks only, no order contents.
+
+**"Confirm no BTrace probe is still attached."** `list_probes` for the PID, `list_jvms` for the attached column, and a plain statement that nothing is left. Not "I believe it is gone".
+
+The wording, the probe shape and the number of tool calls differ from run to run, which is why the demo ships as a rehearsed script ([PROMPTS.md](https://github.com/btraceio/btrace/blob/develop/demos/06-ai-assistant/PROMPTS.md)) with a "do not record if" list rather than as a recording. That list is the interesting document. It is a description of what a bad investigation looks like: widening the scope to `*::*` when a class was enough, leaving a probe attached at the end of a prompt, detaching where it should exit, printing argument values, or answering from general knowledge without ever calling a tool.
+
+### Guardrails
+
+The part I consider important is that the assistant gets fewer privileges than you have, not more. The MCP tools take a PID, a probe and a port, and nothing else: there is no parameter that turns the verifier off, so the assistant cannot put a JVM into trusted mode even if it wanted to. Privileged extensions still need the operator's policy on the agent side. The data-safety skill defaults to method names, durations and exception types rather than request bodies, tokens or customer data, and the scope rules are explicit: an exact method in production, a bounded class or package for discovery, and a broad match only as a time-bounded escalation with a stated event rate and a rollback plan. Every deployment plan the plugin produces names a target, an output destination, an observation window and a stop condition.
+
+Read the tool calls, not just the answer. The one thing worth saying no to is an assistant that suggests you run `btrace -u` by hand.
+
+### Pairing it with JFR
+
+The natural division of labor is the one I described in the jfr-mcp post. JFR is history: it tells you which resource, which interval and which candidate hotspot. BTrace is the present: it confirms, narrowly and live, whether that candidate is still doing what the recording suggested. When the `jfr-analyzer` plugin from the same repository is installed, a `jfr-btrace-interop` skill carries the target identity, the timestamps and the hypothesis from one workflow to the other, and the rule at the end is the same as everywhere else in this post: the probe comes out when the observation window ends.
 
 ## What breaks
 
