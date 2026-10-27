@@ -26,7 +26,7 @@ The last 2.x release, 2.2.6, went out in November 2024. By then the list of thin
 - The `libs=` profiles, which worked by quietly appending jars to the global classpath of the target application. What could possibly go wrong.
 - An agent started with `-javaagent` happily listening on port 2020 for anyone who wanted to deploy a probe.
 
-So, 3.0.0 is a major release in the proper sense of the word. It is also the first release where I would describe BTrace as pleasant to use rather than merely useful. Let me walk through what changed, roughly in the order you will bump into it.
+So 3.0.0 is a major release in the proper sense of the word, and the first one in years that I use because I want to, not because I have to. What follows is what changed, roughly in the order you will bump into it.
 
 ## New address
 
@@ -46,7 +46,7 @@ The practical upshot: `jbang io.btrace:btrace:3.0.0 <pid> script.java` just work
 
 ## Stop writing files for one-line questions
 
-This is the one I use the most. BTrace 3.0 has oneliners, shamelessly inspired by DTrace:
+The feature I use most, by a wide margin. BTrace 3.0 has oneliners, shamelessly inspired by DTrace:
 
 ```sh
 btrace -n 'OrderService::* @return if duration>200ms { print method, time }' <PID>
@@ -69,7 +69,7 @@ btrace -n 'com.myapp.Cache::get @entry { count }' <PID>
 btrace -n 'OrderService::validateOrder @error { print method, stack }' <PID>
 ```
 
-There is no magic here. The client turns the oneliner into a regular `@BTrace` class, compiles it, and deploys it like any other probe. You can even see the generated source. The property has to reach the `btrace` client, not the application, and the launcher passes anything you append to the command line straight to the client's argument parser, so set it through `JAVA_TOOL_OPTIONS`:
+Underneath, a oneliner is an ordinary probe. The client turns it into a `@BTrace` class, compiles it, and deploys it like any file you would have written yourself. You can even look at the generated source. The property has to reach the `btrace` client, not the application, and the launcher passes anything you append to the command line straight to the client's argument parser, so set it through `JAVA_TOOL_OPTIONS`:
 
 ```sh
 JAVA_TOOL_OPTIONS="-Dbtrace.oneliner.dump=true" btrace -n 'OrderService::processOrder @return { print method, time }' <PID>
@@ -92,8 +92,6 @@ public class OrderTiming {
 No imports. Compare that to what a 2.x script looked like and you will understand why I kept putting off writing probes for small questions.
 
 ## Extensions, and what they are allowed to do
-
-Let me start with the feature and work backwards to the plumbing, because the plumbing only makes sense once you see what it is for.
 
 The 2.x `Aggregations` API is gone, and the thing that replaced it is a good place to meet extensions. Here is a probe tracking latency percentiles with `btrace-metrics`, HdrHistogram under the hood:
 
@@ -143,9 +141,7 @@ Failed Extensions:
 
 This is also where the `optional = true` in the probe above earns its keep. When the operator has not allowed the extension, the probe still deploys and the field is bound to a stub that throws on every call, so the failure is visible and local, not fatal. If you would rather have the calls silently do nothing, ask for a no-op shim instead, either per field with `@Injected(optional = true, mode = SHIM)` or for every optional injection in the target JVM with `-Dbtrace.extension.shimMode=shim`. Without `optional = true` there is no fallback at all and the deployment fails fast. The recorded demo of exactly this, the same probe deployed twice with only the agent's policy changed in between, is [tutorial 04](https://github.com/btraceio/btrace/blob/develop/docs/tutorials/04-extensions-and-permissions.md).
 
-Metrics is one of the extensions that ship with 3.0. The others are StatsD export, which predates 3.0 and remains the proven way to push numbers at a real backend, runtime contracts (latency budgets and rate limits checked on live calls), a handful of utilities, and three aimed at AI workloads: LLM call tracing (tokens, latency, estimated cost per model), RAG quality (vector store query latency and similarity scores), and a GPU bridge for ONNX Runtime, DJL and TensorFlow inference timing. The AI ones exist because "which method is slow" has, for a lot of applications, turned into "which model call is slow and how many tokens did it burn". The answer is produced the same way as everywhere else in this post: a probe on the client method, with nothing added to the application and nothing left behind when the probe goes.
-
-Around all of this there is a `btracex` CLI (with a small TUI) to list and inspect extensions and to edit the policy, and an [extension registry](https://github.com/btraceio/btrace-extensions) for third-party ones.
+Metrics is one of the extensions that ship with 3.0. The others are StatsD export, which predates 3.0 and remains the proven way to push numbers at a real backend, runtime contracts (latency budgets and rate limits checked on live calls), a handful of utilities, and three aimed at AI workloads: LLM call tracing (tokens, latency, estimated cost per model), RAG quality (vector store query latency and similarity scores), and a GPU bridge for ONNX Runtime, DJL and TensorFlow inference timing. The AI ones exist because "which method is slow" has, for a lot of applications, turned into "which model call is slow and how many tokens did it burn". The answer is produced the same way as everywhere else in this post: a probe on the client method, with nothing added to the application and nothing left behind when the probe goes. A `btracex` CLI, with a small TUI, lists and inspects what is installed and edits the policy, and third-party extensions have an [extension registry](https://github.com/btraceio/btrace-extensions).
 
 ### How small is an extension? The OTel demo
 
@@ -181,7 +177,7 @@ java -javaagent:btrace.jar=allowExtensions=btrace-otel \
 
 The endpoint defaults to `http://localhost:4318`, the service name to `btrace`, and the exporter posts to the standard `/v1/traces` and `/v1/metrics` paths. Deploy the probe with `btrace <PID> CheckoutSpans.java` and the spans show up in whatever backend you already run.
 
-Let me be clear about what this is: a capability demo, not a production integration. It is honest as "BTrace can export spans and counters to an OTLP endpoint" and nothing more. A real one would need retry with backoff and `Retry-After` handling on the transport, histograms and attributes on the metrics side, and, the piece a real integration lives or dies on, joining the application's own trace by reading the parent from its active OpenTelemetry context instead of inventing a trace id per span. That last one means crossing classloaders into whatever OpenTelemetry version the application ships, and it has not been written. Nor has any of this been verified against a real collector yet. What the demo does show is that the framework makes the boring part, isolation and permissions, free: a weekend extension gets exactly the same gate as the bundled ones.
+It is a capability demo, not a production integration, and the honest summary is "BTrace can export spans and counters to an OTLP endpoint" and nothing more. A real one would need retry with backoff and `Retry-After` handling on the transport, histograms and attributes on the metrics side, and, the piece a real integration lives or dies on, joining the application's own trace by reading the parent from its active OpenTelemetry context instead of inventing a trace id per span. That last one means crossing classloaders into whatever OpenTelemetry version the application ships, and it has not been written. Nor has any of this been verified against a real collector yet. What the demo does show is that the framework makes the boring part, isolation and permissions, free: a weekend extension gets exactly the same gate as the bundled ones.
 
 ## One jar, part two: the fat agent
 
@@ -213,7 +209,7 @@ The interesting part is how the extensions go in, because it is the classdata ma
 Two details I like. First, the published `io.btrace:btrace:3.0.0` artifact *is* a fat agent: it is built by this same plugin and already embeds the bundled extension set, which is why `jbang` users get `MetricsService` without installing anything. Your own `embedExtensions` entries are deduplicated by id against that list, so the plugin is really for adding what the engine does not carry: your own extension, or a third-party one. Second, embedding does not launder permissions. The plugin reads `BTrace-Extension-Permissions` from the extension's API jar manifest, refuses to build at all if the attribute is missing rather than defaulting to "no permissions", and copies it into the embedded metadata. At runtime the embedded extension goes through exactly the same privileged gate as a filesystem one, so the deploy line still has to say what is allowed:
 
 ```sh
-java -javaagent:demo-btrace-agent.jar=allowExtensions=btrace-otel MyApp
+java -javaagent:demo-btrace-agent.jar=allowExtensions=btrace-metrics MyApp
 ```
 
 You can also bake probes in. A `bundledProbes { }` block points at a directory of compiled probe classes (the output of `btracec`, in its package tree) and names the ones to embed by their binary name:
@@ -237,7 +233,7 @@ Probe names are exact binary names, and a name that is not in the jar fails star
 
 ## Attaching to production without sweating
 
-Here is the 2.x situation, honestly: a JVM started with `-javaagent:btrace-agent.jar` opened port 2020 and would accept a probe from anyone who could reach it. Dynamic attach was gated by the OS (same user, same host), but the prepared endpoint was not gated by anything.
+The 2.x situation was this: a JVM started with `-javaagent:btrace-agent.jar` opened port 2020 and would accept a probe from anyone who could reach it. Dynamic attach was gated by the OS (same user, same host), but the prepared endpoint was not gated by anything.
 
 In 3.0, *prepared mode* (an agent started at launch with no script, waiting for a client) looks like this:
 
@@ -299,7 +295,7 @@ The ClassFile API backend is compiled against Java 24 and loaded reflectively, s
 
 ## Wire protocol
 
-Less visible, still worth a paragraph. The client and the agent used to talk Java serialization. 3.0 defaults to a binary V2 protocol: [3-6x faster](https://github.com/btraceio/btrace/blob/develop/docs/architecture/Version2ProtocolArchitecture.md) command transmission and 2-5x smaller payloads, per the protocol benchmarks.
+Nobody will notice this one, which is the point. The client and the agent used to talk Java serialization. 3.0 defaults to a binary V2 protocol: [3-6x faster](https://github.com/btraceio/btrace/blob/develop/docs/architecture/Version2ProtocolArchitecture.md) command transmission and 2-5x smaller payloads, per the protocol benchmarks.
 
 Every connection starts with a negotiation: the receiving side looks for the `BTR2` magic prefix and falls back to V1 if it is missing. So a 2.x client talks to a 3.0 agent and vice versa on dynamic attach, with no configuration. The one wrinkle: a 3.0 client connecting to a 2.x agent waits for a V2 reply that never comes before falling back, which costs about 5 seconds on the first connect. If you know the agent is 2.x, `-Dbtrace.comm.protocol=v1` on the client skips the wait.
 
