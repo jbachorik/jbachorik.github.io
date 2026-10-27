@@ -52,7 +52,9 @@ This is the one I use the most. BTrace 3.0 has oneliners, shamelessly inspired b
 btrace -n 'OrderService::* @return if duration>200ms { print method, time }' <PID>
 ```
 
-![Three oneliners against a live order service]({{ site.baseurl }}/assets/images/btrace-3-0-0/01-oneliner.gif)
+<video controls muted playsinline preload="metadata" style="max-width: 100%;">
+  <source src="{{ site.baseurl }}/assets/images/btrace-3-0-0/01-oneliner.mp4" type="video/mp4">
+</video>
 
 The grammar is small: a class pattern, a method pattern, a location (`@entry`, `@return`, `@error`), an optional filter, and a list of actions (`print`, `count`, `time`, `stack`). Patterns take wildcards or `/regex/`. The filter can look at `duration` or at `args[N]`.
 
@@ -254,9 +256,17 @@ Actions: read target system properties and detached; no agent load or BTrace com
 
 Doctor reads the published properties through the Attach API and detaches. It never loads an agent and never opens the command socket, which makes it safe to run against anything, including the JVM you are not supposed to touch. The exit codes are stable (`0` ready, `2` preparation required, `3` inaccessible), so a deployment script can gate on the result, and `btrace doctor <PID> --json` prints the same report as JSON for anything that would rather parse it than grep it. When the answer is "not ready", it tells you what to change on the *next* deployment rather than leaving you to guess.
 
-![Prepared mode, doctor, attach, and recovery after exit]({{ site.baseurl }}/assets/images/btrace-3-0-0/07-production-safe-attach.gif)
+## Leaving without a trace
 
-One more thing that the GIF shows and that I care about a lot. Probe handlers are now dispatched through `invokedynamic` call sites. When the client exits, the agent retransforms the instrumented classes back to their original bytecode, and the call sites become no-ops. Even in the window where the old bytecode is still executing, there is no lingering overhead. The demo app in the recording reports its own throughput, so you can watch it drop when the (deliberately empty, deliberately worst-case) probe lands on a method called tens of millions of times per second, and watch it come back within seconds of the client leaving. An agent you cannot remove is a liability; this one leaves.
+Attaching is only half of the production story. The other half is what happens when you leave. Anyone who has run a Java agent in production has met the variant that cannot be removed: the bytecode stays patched, a stub keeps getting called on every invocation, and the only way to get the original performance back is a restart, which is exactly what you attached an agent to avoid. For a tool that is meant to be attached for ten minutes and then forgotten, that is a disqualifying property.
+
+Here is the whole cycle on a deliberately unfair target: a single thread calling one cheap method in a tight loop, reporting its own throughput every two seconds. Watch the number drop when the probe lands, and watch it come back after the client exits.
+
+<video controls muted playsinline preload="metadata" style="max-width: 100%;">
+  <source src="{{ site.baseurl }}/assets/images/btrace-3-0-0/07-production-safe-attach.mp4" type="video/mp4">
+</video>
+
+Two things make the recovery work. Probe handlers in 3.0 are dispatched through `invokedynamic` call sites, and when the client exits those call sites become no-ops. At the same time the agent retransforms the instrumented classes back to their original bytecode. The first mechanism covers the window in which the old bytecode is still executing; the second removes it. The drop itself is the worst case on purpose: the probe handler is empty, so everything you see is call-site dispatch on a method invoked tens of millions of times per second, and a real production method is called orders of magnitude less often. An agent you cannot remove is a liability. This one leaves.
 
 ## The ASM ceiling
 
@@ -327,7 +337,7 @@ docker pull ghcr.io/btraceio/btrace:3.0.0
 curl -LO https://github.com/btraceio/btrace/releases/download/v3.0.0/btrace-v3.0.0-bin.tar.gz
 ```
 
-The repository ships a set of [replayable demos](https://github.com/btraceio/btrace/tree/develop/demos), each with a `run.sh`, and a [tutorial series](https://github.com/btraceio/btrace/tree/develop/docs/tutorials) that walks the same ground in ten-minute pieces. The GIFs in this post come straight from those demos.
+The repository ships a set of [replayable demos](https://github.com/btraceio/btrace/tree/develop/demos), each with a `run.sh`, and a [tutorial series](https://github.com/btraceio/btrace/tree/develop/docs/tutorials) that walks the same ground in ten-minute pieces. The recordings in this post come straight from those demos.
 
 BTrace has been asking the same question for well over fifteen years: what is this JVM doing, right now, without me restarting it? 3.0 does not change the question. It just stops making you work so hard to ask it.
 
