@@ -224,7 +224,7 @@ In 3.0, *prepared mode* (an agent started at launch with no script, waiting for 
 java -javaagent:/path/to/btrace.jar=port=0 MyApp
 ```
 
-The agent binds a loopback address only (wildcard and non-loopback addresses are rejected and the command server simply does not start), generates an owner-protected token file, and publishes the address, the port and the token file path as JVM properties. A 3.0 client reads those through the Attach API and authenticates before every command. The token never shows up as a process argument or a system property. `port=0` lets the OS pick a free port, so there is nothing to collide with. A 2.x client cannot talk to a 3.0 prepared endpoint, and that is the point.
+The agent binds a loopback address only. There is a `bindAddress=` option, but it exists to pick the loopback family (`127.0.0.1` or `::1`); give it a wildcard or a non-loopback address and the agent rejects it, logs one line naming the option, and starts without a command server while the application runs on. The agent then generates an owner-protected token file, and publishes the address, the port and the token file path as JVM properties. A 3.0 client reads those through the Attach API and authenticates before every command. The token never shows up as a process argument or a system property. `port=0` lets the OS pick a free port, so there is nothing to collide with. A 2.x client cannot talk to a 3.0 prepared endpoint, and that is the point.
 
 The other half of this is `btrace doctor`:
 
