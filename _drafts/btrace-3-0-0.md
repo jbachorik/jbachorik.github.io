@@ -322,7 +322,7 @@ A major version is allowed to break things, and this one does. The complete list
 | 2.x client against a 3.0 prepared agent | Rejected. Prepared mode is authenticated now; upgrade the client. |
 | Targets on Java 8-16 | Still work for all of 3.x, with a one-time deprecation warning. Gone in 4.0. |
 
-That last row deserves a sentence. BTrace 3.0 runs against Java 8 through 27 and beyond, but I am not going to pretend that testing every probe kind against eight-year-old JVMs is a good use of anyone's time in 2026. If the warning bothers you, `-Dbtrace.suppressJavaDeprecationWarning=true` turns it off.
+That last row deserves a sentence. BTrace 3.0 runs against Java 8 through 27 and beyond, but I am not going to pretend that testing every probe kind against JVMs released between 2014 and 2021 is a good use of anyone's time in 2026. If the warning bothers you, `-Dbtrace.suppressJavaDeprecationWarning=true` turns it off.
 
 ## Try it
 
