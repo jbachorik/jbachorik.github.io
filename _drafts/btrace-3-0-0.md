@@ -141,16 +141,11 @@ Failed Extensions:
 
 This is also where the `optional = true` in the probe above earns its keep. When the operator has not allowed the extension, the probe still deploys and the field is bound to a stub that throws on every call, so the failure is visible and local, not fatal. If you would rather have the calls silently do nothing, ask for a no-op shim instead, either per field with `@Injected(optional = true, mode = SHIM)` or for every optional injection in the target JVM with `-Dbtrace.extension.shimMode=shim`. Without `optional = true` there is no fallback at all and the deployment fails fast. The recorded demo of exactly this, the same probe deployed twice with only the agent's policy changed in between, is [tutorial 04](https://github.com/btraceio/btrace/blob/develop/docs/tutorials/04-extensions-and-permissions.md).
 
-Metrics is one of the extensions that ship with 3.0. The others are StatsD export, which predates 3.0 and remains the proven way to push numbers at a real backend, runtime contracts (latency budgets and rate limits checked on live calls), a handful of utilities, and three aimed at AI workloads: LLM call tracing (tokens, latency, estimated cost per model), RAG quality (vector store query latency and similarity scores), and a GPU bridge for ONNX Runtime, DJL and TensorFlow inference timing. The AI ones exist because "which method is slow" has, for a lot of applications, turned into "which model call is slow and how many tokens did it burn". The answer is produced the same way as everywhere else in this post: a probe on the client method, with nothing added to the application and nothing left behind when the probe goes. A `btracex` CLI, with a small TUI, lists and inspects what is installed and edits the policy, and third-party extensions have an [extension registry](https://github.com/btraceio/btrace-extensions).
+Metrics is one of the extensions that ship with 3.0. The others are StatsD export, which predates 3.0 and remains the proven way to push numbers at a real backend, an OpenTelemetry exporter (more on that in a moment), runtime contracts (latency budgets and rate limits checked on live calls), a handful of utilities, and three aimed at AI workloads: LLM call tracing (tokens, latency, estimated cost per model), RAG quality (vector store query latency and similarity scores), and a GPU bridge for ONNX Runtime, DJL and TensorFlow inference timing. The AI ones exist because "which method is slow" has, for a lot of applications, turned into "which model call is slow and how many tokens did it burn". The answer is produced the same way as everywhere else in this post: a probe on the client method, with nothing added to the application and nothing left behind when the probe goes. A `btracex` CLI, with a small TUI, lists and inspects what is installed and edits the policy, and third-party extensions have an [extension registry](https://github.com/btraceio/btrace-extensions).
 
-### How small is an extension? The OTel demo
+### How small is an extension? The OTel exporter
 
-<!-- DRAFT NOTE: the btrace-otel extension currently lives only on the claude/project-review-HBcMK
-     branch (commit 7fd17c56), still under org.openjdk.btrace, and is NOT on develop or in the
-     3.0.0 bundled set. Land it (or move it to btraceio/btrace-extensions) before publishing, or
-     cut this subsection. The snippet below is adapted to the 3.0 API. -->
-
-To get a feel for how little an extension is, here is one I threw together to see whether BTrace could speak OpenTelemetry: an `OTel` interface with four methods, and an implementation that queues spans and counters on the hot path and ships them in batches over OTLP/HTTP from a daemon thread. Roughly four hundred lines, including the hand-rolled JSON.
+To get a feel for how little an extension is, here is the one that started as a weekend experiment to see whether BTrace could speak OpenTelemetry and ended up in the bundled set: `btrace-otel`. The API is one interface, `OTel`, with a handful of methods. The implementation, roughly six hundred lines, keeps spans in a lock-free bounded queue, aggregates counters and gauges per name, and posts both to `<endpoint>/v1/traces` and `<endpoint>/v1/metrics` from a background thread once per flush interval.
 
 ```java
 @BTrace
@@ -166,7 +161,9 @@ public class CheckoutSpans {
 }
 ```
 
-Notice there is no start and no end call. BTrace already knows when the method returned and how long it took, so the span is built after the fact from the duration, and each one lands in its own trace. The extension runs inside the traced JVM, so it is configured there, with plain system properties on the application's command line, and because it opens sockets and starts a thread it declares `NETWORK` and `THREADS` and goes through the same operator gate as everything above:
+Notice there is no start and no end call. BTrace already knows when the method returned and how long it took, so the span is built after the fact: the end timestamp is taken when `span()` is called, the start is end minus duration. On its own, each such span is the root of a fresh trace. If you want it to hang off the application's trace, `spanInTrace(traceId, parentSpanId, ...)` takes the ids, which a script can carry in `@TLS` fields after picking them off a `traceparent` header at the request boundary, and `newTraceId()` / `newSpanId()` let one script build a small tree of its own. Counters go out as monotonic sums with delta temporality, which is the one that actually adds up on the receiving side; gauges export the last value seen.
+
+The extension runs inside the traced JVM, so it is configured there: script arguments first, then `btrace.otel.*` system properties on the application's command line. Because it opens sockets, starts a thread and reads those properties, it declares `NETWORK`, `THREADS` and `SYSTEM_PROPS`, and goes through the same operator gate as everything above:
 
 ```sh
 java -javaagent:btrace.jar=allowExtensions=btrace-otel \
@@ -175,9 +172,7 @@ java -javaagent:btrace.jar=allowExtensions=btrace-otel \
      MyApp
 ```
 
-The endpoint defaults to `http://localhost:4318`, the service name to `btrace`, and the exporter posts to the standard `/v1/traces` and `/v1/metrics` paths. Deploy the probe with `btrace <PID> CheckoutSpans.java` and the spans show up in whatever backend you already run.
-
-It is a capability demo, not a production integration, and the honest summary is "BTrace can export spans and counters to an OTLP endpoint" and nothing more. A real one would need retry with backoff and `Retry-After` handling on the transport, histograms and attributes on the metrics side, and, the piece a real integration lives or dies on, joining the application's own trace by reading the parent from its active OpenTelemetry context instead of inventing a trace id per span. That last one means crossing classloaders into whatever OpenTelemetry version the application ships, and it has not been written. Nor has any of this been verified against a real collector yet. What the demo does show is that the framework makes the boring part, isolation and permissions, free: a weekend extension gets exactly the same gate as the bundled ones.
+What it does not do is just as important as what it does. There is no retry with backoff and no `Retry-After` handling on the transport, no compression or authentication headers, no support for the `OTEL_*` environment variables, and no histograms or attribute sets on metrics. It does not read the application's active OpenTelemetry context: if you want correlation, your script has to carry the ids. And while every payload it produces is decoded in the test suite by the official OTLP protobuf parser, which rejects unknown fields and wrong types, it has not yet been run against a real collector and a real backend. Honest summary: BTrace can export spans and counters to an OTLP endpoint, with a short and public list of what a production integration would still need. What the exercise did show is that the framework makes the boring part, isolation and permissions, free: a weekend extension gets exactly the same gate as the bundled ones, and once it earned its keep, the same tests.
 
 ## One jar, part two: the fat agent
 
@@ -308,29 +303,31 @@ I have written about [jfr-mcp](/posts/jfr-mcp-serve) before, so the shape of thi
 /plugin install btrace-observability@btraceio-agent-plugins
 ```
 
-The server runs through jbang, downloads the single `io.btrace:btrace` jar on first use (the masked jar earning its keep again), and exposes a deliberately short list of tools: list JVMs, deploy a oneliner or a script, send an event, list probes, and detach, exit or stop a probe. Codex and Pi are covered by the same repository.
+The server runs through jbang, downloads the single `io.btrace:btrace` jar on first use (the masked jar earning its keep again), and exposes a deliberately short list of tools: list JVMs, deploy a oneliner or a script, read what a probe has printed, send an event, list probes, and detach, exit or stop a probe. Codex and Pi are covered by the same repository.
 
 What makes this more than "an LLM with a shell" is the skill suite that ships with the server. There are eleven skills. One coordinates and the rest are specialists: endpoint diagnostics, latency analysis, failure analysis, oneliner triage, probe lifecycle, data safety, runtime access (SSH, Docker, Kubernetes, sidecars), startup and packaging (fat agents, distroless images), MCP operations, and a migration skill for the retired `libs` profiles. You do not pick them. You ask an incident question in operational language and the coordinator composes them.
 
 ### A session, end to end
 
-The repository ships this as [demo 06](https://github.com/btraceio/btrace/tree/develop/demos/06-ai-assistant): the same order service as everywhere else in this post, with `chargeCard` slow on about one call in ten and `validateOrder` throwing on about one order in twelve while the application swallows the exception. Four prompts, in plain English.
+The repository ships this as [demo 06](https://github.com/btraceio/btrace/tree/develop/demos/06-ai-assistant), and unlike the other demos in this post it is not a rehearsed `run.sh` but an unedited, real Claude Code session, rendered from its transcript. The target is a checkout service: four worker threads call `checkout`, which screens the order for fraud, reserves inventory and authorizes the payment. The fraud screen and the payment client live in a vendor SDK that is shipped as a binary only, on purpose. The service source tells the assistant what `checkout` does; it cannot tell it what happens inside `FraudScreen` or `PaymentClient`. For that it has to probe the live JVM.
 
-**"What Java processes are running on this machine?"** The assistant calls `list_jvms` and comes back with the JVMs, their main classes and whether BTrace is attached to any of them. Nothing is attached yet, and it should not attach anything at this point either.
+<video controls muted playsinline preload="metadata" style="max-width: 100%;">
+  <source src="{{ site.baseurl }}/assets/images/btrace-3-0-0/06-ai-assistant.mp4" type="video/mp4">
+</video>
 
-**"The order service with PID N processes orders and some are slow. Find which method in OrderService is slow and by how much. Keep the probe narrow and remove it when you are done."** The latency skill and the oneliner triage skill kick in. The assistant writes something shaped like
+The session is two prompts. The first is the incident, in the words an on-call engineer would use:
 
-```
-OrderService::* @return if duration>200ms { print method, time }
-```
+> Customers report that checkout is sometimes slow, and that some orders never complete, but nothing shows up in the logs. The checkout service is running on this machine and we cannot restart it; its source is in this directory. Find out what is going on. Keep any probe narrow, and leave nothing attached when you are done.
 
-deploys it with `deploy_oneliner`, reads the stream for a while, and concludes that `chargeCard` takes roughly 250 to 400 ms on about one call in ten and that `processOrder` is slow only because it calls it. Then it calls `exit_probe`, which stops and removes the probe, and says so.
+The assistant reads `CheckoutServiceApp.java` and notices that `checkout` catches `RiskServiceException` and quietly drops the order. It calls `list_jvms` and picks the service. Then it writes one script probe, deploys it with `deploy_script`, and the probe times `FraudScreen.screen` on return and on error and `PaymentClient.authorize`, with a report every five seconds. It reads the report with `read_probe_output`, waiting up to twelve seconds for one to arrive, removes the probe with `exit_probe`, and confirms with `list_probes`. The findings, with the numbers the probe printed rather than numbers it imagined: `screen` threw on 22 of 104 calls, about 21%, and `checkout` swallows it, so those orders never complete and nothing is logged; `authorize` averaged about 129 ms with a worst case of 449 ms, while fraud screening took about 15 ms. Both planted defects, found from one narrow probe on a library with no source.
 
-**"Some orders fail and the app swallows the exception. Show me where it is thrown."** An `@error` probe on `validateOrder`, the stack through `processOrder`, and the observation that it happens on roughly one order in twelve. Method names and stacks only, no order contents.
+The second prompt is the one I would ask any human after a production session:
 
-**"Confirm no BTrace probe is still attached."** `list_probes` for the PID, `list_jvms` for the attached column, and a plain statement that nothing is left. Not "I believe it is gone".
+> Double-check that no BTrace probe is still running on the checkout service.
 
-The wording, the probe shape and the number of tool calls differ from run to run, which is why the demo ships as a rehearsed script ([PROMPTS.md](https://github.com/btraceio/btrace/blob/develop/demos/06-ai-assistant/PROMPTS.md)) with a "do not record if" list rather than as a recording. That list is the interesting document. It is a description of what a bad investigation looks like: widening the scope to `*::*` when a class was enough, leaving a probe attached at the end of a prompt, detaching where it should exit, printing argument values, or answering from general knowledge without ever calling a tool.
+`list_probes` for the PID, `list_jvms`, and a plain statement that nothing is running. It also explains, correctly, that `list_jvms` still shows `BTrace: attached`, because the agent stays loaded in the JVM until it restarts, and that this is not the same thing as a probe running.
+
+The wording, the probe shape and the number of tool calls differ from run to run, which is why the demo ships with a rehearsed prompt script ([PROMPTS.md](https://github.com/btraceio/btrace/blob/develop/demos/06-ai-assistant/PROMPTS.md)) and a "do not record if" list. That list is the interesting document. It is a description of what a bad investigation looks like: widening the scope to `*::*` when a class was enough, leaving a probe attached at the end of a prompt, detaching where it should exit, printing argument values, a conclusion not backed by numbers from the probe, or answering from general knowledge without ever calling a tool.
 
 ### Guardrails
 
