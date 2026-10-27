@@ -71,7 +71,9 @@ There is no magic here. The client turns the oneliner into a regular `@BTrace` c
 
 ```sh
 JAVA_TOOL_OPTIONS="-Dbtrace.oneliner.dump=true" btrace -n 'OrderService::processOrder @return { print method, time }' <PID>
-``` A oneliner is a real probe with the training wheels on, which also means it goes through the same verifier as everything else.
+```
+
+A oneliner is a real probe with the training wheels on, which also means it goes through the same verifier as everything else.
 
 When you outgrow a oneliner, the next step is a script file, and that got shorter too. The flat DSL drops the `BTraceUtils.` prefix, and the compiler injects `import static io.btrace.BTrace.*` and `import io.btrace.core.annotations.*` into any script that does not import the DSL itself. The minimal script is now literally this:
 
