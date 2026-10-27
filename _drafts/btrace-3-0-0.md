@@ -91,59 +91,11 @@ public class OrderTiming {
 
 No imports. Compare that to what a 2.x script looked like and you will understand why I kept putting off writing probes for small questions.
 
-## Extensions, or how BTrace learned to speak OTel
-
-<!-- DRAFT NOTE: the btrace-otel extension currently lives only on the claude/project-review-HBcMK
-     branch (commit 7fd17c56), still under org.openjdk.btrace, and is NOT on develop or in the
-     3.0.0 bundled set. Land it (or move it to btraceio/btrace-extensions) before publishing, or
-     reword this section as "coming after 3.0.0". The snippet below is adapted to the 3.0 API. -->
+## Extensions, and what they are allowed to do
 
 Let me start with the feature and work backwards to the plumbing, because the plumbing only makes sense once you see what it is for.
 
-In 2026 nobody wants a tracing tool that prints to a console and calls it a day. The console is where you *start*; the data has to end up next to everything else, which these days means OpenTelemetry. So here is a BTrace probe that turns method timings into OTLP spans and metrics:
-
-```java
-@BTrace
-public class CheckoutSpans {
-  @Injected
-  private static OTel otel;
-
-  @OnMethod(clazz = "com.example.OrderService", method = "checkout", location = @Location(Kind.RETURN))
-  public static void onCheckout(@Duration long durationNanos) {
-    otel.span("OrderService.checkout", durationNanos);
-    otel.counter("orders.checkout", 1);
-  }
-}
-```
-
-The extension runs inside the traced JVM, so it is configured there, with plain system properties on the application's command line. Tell it where your OTLP/HTTP collector listens and what to call the service, allow the extension, and start the application:
-
-```sh
-java -javaagent:btrace.jar=allowExtensions=btrace-otel \
-     -Dbtrace.otel.endpoint=http://otel-collector:4318 \
-     -Dbtrace.otel.service.name=order-service \
-     MyApp
-```
-
-The endpoint defaults to `http://localhost:4318`, the service name to `btrace`, and the exporter posts to the standard `/v1/traces` and `/v1/metrics` paths under that base URL. Deploy the probe above with `btrace <PID> CheckoutSpans.java` and the spans show up in whatever backend you already run. No SDK in the application, no agent other than BTrace, and the probe can be removed the same way it was added. Notice there is no start and no end call. BTrace already knows when the method returned and how long it took, so the span is built after the fact from the duration, and each one lands in its own trace. Spans and counters are queued on the hot path and shipped by a background exporter thread over OTLP/HTTP in batches, so the instrumented method pays for an enqueue and nothing else.
-
-Now the uncomfortable part. Look at what that extension needs in order to work: an HTTP client, a JSON encoder, a queue, and a daemon thread that opens network connections *from inside the JVM you are observing*. In 2.x there was exactly one way to get code like that into a probe: the `libs=` profiles, which appended jars to the global classpath of the target application and hoped nothing conflicted. On top of that, calling into such a jar required unsafe mode, euphemistically called "trusted", so the verifier was off too. A "safe" tracing tool mutating the application classpath and switching off its own safety net so that it can open sockets. I could never write that sentence with a straight face, so the profiles are gone, and I do not miss them.
-
-The replacement is the extension framework, and OTel is the reason it looks the way it does.
-
-An extension is a pair of jars. A small API jar (the `OTel` interface, nothing else) lands on the bootstrap classpath so probes can link against it. The implementation (the HTTP code, the queues, the exporter thread) is loaded in isolation and bridged to the probe through an `invokedynamic` call site. The application never sees it, and the implementation never sees the application's classes either. `@Injected` is the whole API surface from the script's point of view.
-
-Then permissions. Every extension declares what it needs, and `btrace-otel` declares `NETWORK` and `THREADS`, one for the socket and one for the exporter thread. Both are privileged permissions, and privileged extensions do not link unless the *operator* of the target JVM allows it, either as an agent argument (the `allowExtensions=btrace-otel` in the command above) or in a policy file.
-
-There is deliberately no client-side flag. The person deploying a probe does not get to grant themselves a network socket on a JVM they do not own. The BTrace Gradle plugin even computes most of an extension's permission set by statically scanning the implementation for JDK APIs that imply one, so an extension cannot quietly forget to mention that it uses reflection or threads. When an extension is blocked, the agent says so, and says why:
-
-```
-$ btrace -le <PID>
-Failed Extensions:
-  1. btrace-metrics: Blocked privileged extension. Required=[THREADS, REFLECTION, CLASSLOADER]
-```
-
-The same machinery carries the rest of the bundled extensions, and the one I expect people to reach for first is `btrace-metrics`, HdrHistogram under the hood, which is also the replacement for the removed 2.x `Aggregations` API:
+The 2.x `Aggregations` API is gone, and the thing that replaced it is a good place to meet extensions. Here is a probe tracking latency percentiles with `btrace-metrics`, HdrHistogram under the hood:
 
 ```java
 @BTrace
@@ -169,11 +121,67 @@ public class LatencyHistogram {
 }
 ```
 
-Note the `optional = true`. When the operator has not allowed the extension, the probe still deploys and the field is bound to a stub that throws on every call, so the failure is visible and local, not fatal. If you would rather have the calls silently do nothing, ask for a no-op shim instead, either per field with `@Injected(optional = true, mode = SHIM)` or for every optional injection in the target JVM with `-Dbtrace.extension.shimMode=shim`. Without `optional = true` there is no fallback at all and the deployment fails fast.
+`@Injected` is the whole API surface from the script's point of view: ask for a service, get a service. Deploy it and every five seconds you get a line of percentiles for the method you care about, computed by a real histogram library rather than by whatever you could fit through the verifier.
 
-OTel and metrics are two of the extensions that ship with 3.0. The others are StatsD export, runtime contracts (latency budgets and rate limits checked on live calls), a handful of utilities, and three aimed at AI workloads: LLM call tracing (tokens, latency, estimated cost per model), RAG quality (vector store query latency and similarity scores), and a GPU bridge for ONNX Runtime, DJL and TensorFlow inference timing. The AI ones exist because "which method is slow" has, for a lot of applications, turned into "which model call is slow and how many tokens did it burn". The answer is produced the same way as everywhere else in this post: a probe on the client method, with nothing added to the application and nothing left behind when the probe goes.
+Now the uncomfortable part. Look at what that extension needs in order to work: HdrHistogram, a third-party library, loaded and running *inside the JVM you are observing*, plus the reflection and threading bits that come with it. In 2.x there was exactly one way to get code like that into a probe: the `libs=` profiles, which appended jars to the global classpath of the target application and hoped nothing conflicted. On top of that, calling into such a jar required unsafe mode, euphemistically called "trusted", so the verifier was off too. A "safe" tracing tool mutating the application classpath and switching off its own safety net so that it can compute a percentile. I could never write that sentence with a straight face, so the profiles are gone, and I do not miss them.
+
+The replacement is the extension framework. An extension is a pair of jars. A small API jar (the `MetricsService` interface and its histogram types, nothing else) lands on the bootstrap classpath so probes can link against it. The implementation, HdrHistogram included, is loaded in isolation and bridged to the probe through an `invokedynamic` call site. The application never sees it, and the implementation never sees the application's classes either.
+
+Then permissions. Every extension declares what it needs, and the BTrace Gradle plugin computes most of that by statically scanning the implementation for JDK APIs that imply a permission, so an extension cannot quietly forget to mention that it uses reflection or starts threads. `btrace-metrics` ends up declaring `THREADS`, `REFLECTION` and `CLASSLOADER`, all three privileged, and privileged extensions do not link unless the *operator* of the target JVM allows it, either as an agent argument or in a policy file:
+
+```sh
+java -javaagent:btrace.jar=allowExtensions=btrace-metrics MyApp
+```
+
+There is deliberately no client-side flag. The person deploying a probe does not get to grant themselves reflection or threads on a JVM they do not own. And when an extension is blocked, the agent says so, and says why:
+
+```
+$ btrace -le <PID>
+Failed Extensions:
+  1. btrace-metrics: Blocked privileged extension. Required=[THREADS, REFLECTION, CLASSLOADER]
+```
+
+This is also where the `optional = true` in the probe above earns its keep. When the operator has not allowed the extension, the probe still deploys and the field is bound to a stub that throws on every call, so the failure is visible and local, not fatal. If you would rather have the calls silently do nothing, ask for a no-op shim instead, either per field with `@Injected(optional = true, mode = SHIM)` or for every optional injection in the target JVM with `-Dbtrace.extension.shimMode=shim`. Without `optional = true` there is no fallback at all and the deployment fails fast. The recorded demo of exactly this, the same probe deployed twice with only the agent's policy changed in between, is [tutorial 04](https://github.com/btraceio/btrace/blob/develop/docs/tutorials/04-extensions-and-permissions.md).
+
+Metrics is one of the extensions that ship with 3.0. The others are StatsD export, which predates 3.0 and remains the proven way to push numbers at a real backend, runtime contracts (latency budgets and rate limits checked on live calls), a handful of utilities, and three aimed at AI workloads: LLM call tracing (tokens, latency, estimated cost per model), RAG quality (vector store query latency and similarity scores), and a GPU bridge for ONNX Runtime, DJL and TensorFlow inference timing. The AI ones exist because "which method is slow" has, for a lot of applications, turned into "which model call is slow and how many tokens did it burn". The answer is produced the same way as everywhere else in this post: a probe on the client method, with nothing added to the application and nothing left behind when the probe goes.
 
 Around all of this there is a `btracex` CLI (with a small TUI) to list and inspect extensions and to edit the policy, and an [extension registry](https://github.com/btraceio/btrace-extensions) for third-party ones.
+
+### How small is an extension? The OTel demo
+
+<!-- DRAFT NOTE: the btrace-otel extension currently lives only on the claude/project-review-HBcMK
+     branch (commit 7fd17c56), still under org.openjdk.btrace, and is NOT on develop or in the
+     3.0.0 bundled set. Land it (or move it to btraceio/btrace-extensions) before publishing, or
+     cut this subsection. The snippet below is adapted to the 3.0 API. -->
+
+To get a feel for how little an extension is, here is one I threw together to see whether BTrace could speak OpenTelemetry: an `OTel` interface with four methods, and an implementation that queues spans and counters on the hot path and ships them in batches over OTLP/HTTP from a daemon thread. Roughly four hundred lines, including the hand-rolled JSON.
+
+```java
+@BTrace
+public class CheckoutSpans {
+  @Injected
+  private static OTel otel;
+
+  @OnMethod(clazz = "com.example.OrderService", method = "checkout", location = @Location(Kind.RETURN))
+  public static void onCheckout(@Duration long durationNanos) {
+    otel.span("OrderService.checkout", durationNanos);
+    otel.counter("orders.checkout", 1);
+  }
+}
+```
+
+Notice there is no start and no end call. BTrace already knows when the method returned and how long it took, so the span is built after the fact from the duration, and each one lands in its own trace. The extension runs inside the traced JVM, so it is configured there, with plain system properties on the application's command line, and because it opens sockets and starts a thread it declares `NETWORK` and `THREADS` and goes through the same operator gate as everything above:
+
+```sh
+java -javaagent:btrace.jar=allowExtensions=btrace-otel \
+     -Dbtrace.otel.endpoint=http://otel-collector:4318 \
+     -Dbtrace.otel.service.name=order-service \
+     MyApp
+```
+
+The endpoint defaults to `http://localhost:4318`, the service name to `btrace`, and the exporter posts to the standard `/v1/traces` and `/v1/metrics` paths. Deploy the probe with `btrace <PID> CheckoutSpans.java` and the spans show up in whatever backend you already run.
+
+Let me be clear about what this is: a capability demo, not a production integration. It is honest as "BTrace can export spans and counters to an OTLP endpoint" and nothing more. A real one would need retry with backoff and `Retry-After` handling on the transport, histograms and attributes on the metrics side, and, the piece a real integration lives or dies on, joining the application's own trace by reading the parent from its active OpenTelemetry context instead of inventing a trace id per span. That last one means crossing classloaders into whatever OpenTelemetry version the application ships, and it has not been written. Nor has any of this been verified against a real collector yet. What the demo does show is that the framework makes the boring part, isolation and permissions, free: a weekend extension gets exactly the same gate as the bundled ones.
 
 ## One jar, part two: the fat agent
 
@@ -191,7 +199,7 @@ btraceFatAgent {
     btraceVersion = '3.0.0'
 
     embedExtensions {
-        file('btrace-otel.zip')          // an extension package
+        file('btrace-metrics.zip')       // an extension package
         project(':my-custom-extension')  // or a subproject in the same build
         maven('com.acme:acme-ext:1.2')   // or published Maven coordinates
     }
