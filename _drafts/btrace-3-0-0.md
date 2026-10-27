@@ -206,7 +206,18 @@ Two details I like. First, the published `io.btrace:btrace:3.0.0` artifact *is* 
 java -javaagent:demo-btrace-agent.jar=allowExtensions=btrace-otel MyApp
 ```
 
-You can also bake probes in. A `bundledProbes { }` block stages compiled probe classes under `META-INF/btrace-probes/`, and an agent argument selects which one starts with the JVM:
+You can also bake probes in. A `bundledProbes { }` block points at a directory of compiled probe classes (the output of `btracec`, in its package tree) and names the ones to embed by their binary name:
+
+```groovy
+btraceFatAgent {
+    bundledProbes {
+        from layout.buildDirectory.dir('compiled-probes').get().asFile
+        include 'com.example.OrderStartupProbe'
+    }
+}
+```
+
+The class ends up at `META-INF/btrace-probes/com/example/OrderStartupProbe.class`, and an agent argument selects which embedded probe starts with the JVM:
 
 ```sh
 java -javaagent:demo-btrace-agent.jar=probes=com.example.OrderStartupProbe,output=stdout MyApp
