@@ -167,7 +167,7 @@ public class LatencyHistogram {
 }
 ```
 
-Note the `optional = true`. When the operator has not allowed the extension, the probe still deploys and gets a throwing stub (or a no-op shim, if you ask for one) instead of failing to link. The failure is visible and local, not fatal.
+Note the `optional = true`. When the operator has not allowed the extension, the probe still deploys and the field is bound to a stub that throws on every call, so the failure is visible and local, not fatal. If you would rather have the calls silently do nothing, ask for a no-op shim instead, either per field with `@Injected(optional = true, mode = SHIM)` or for every optional injection in the target JVM with `-Dbtrace.extension.shimMode=shim`. Without `optional = true` there is no fallback at all and the deployment fails fast.
 
 The full bundled set is: metrics, StatsD, contracts (runtime SLA checks), LLM tracing, RAG quality, a GPU bridge, and utilities. The LLM one is me admitting that "which method is slow" has often become "which model call is slow and how many tokens did it burn". It is answered the same way as every other question here: a probe on the client method, nothing added to the application.
 
