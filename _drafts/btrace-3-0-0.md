@@ -345,6 +345,10 @@ The repository ships a set of [replayable demos](https://github.com/btraceio/btr
 
 BTrace has been asking the same question for well over fifteen years: what is this JVM doing, right now, without me restarting it? 3.0 does not change the question. It just stops making you work so hard to ask it.
 
+## PS: how this got done
+
+A word on how a one-person, evenings-and-weekends project shipped this much in one release. Most of what is above started as an idea I would normally have parked for lack of time: a second instrumentation backend, a masked jar, an authenticated prepared mode, a DSL that compiles to probes. Working with coding agents changed the economics. I could try a crazy idea in an afternoon, throw it away if it did not hold up, and when it did, have the agent write the tests, the golden files, the migration script, the tutorials with their replayable demos, and the misuse corpus that now runs on every push. That last part is the one that matters. Those are the checks I would never have had the evenings to write by hand, and 3.0 has far more of them than any release before it. The ideas are still mine, and so are the mistakes. The verification is what I could not have afforded before.
+
 ---
 
 *BTrace is developed at [btraceio/btrace](https://github.com/btraceio/btrace) under the Apache 2.0 license. The 3.0.0 release notes are [here](https://github.com/btraceio/btrace/blob/develop/.github/release-notes/v3.0.0.md).*
