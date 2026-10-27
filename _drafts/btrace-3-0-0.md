@@ -252,7 +252,7 @@ Authentication: required; credential file readable
 Actions: read target system properties and detached; no agent load or BTrace command connection was attempted.
 ```
 
-Doctor reads the published properties through the Attach API and detaches. It never loads an agent and never opens the command socket, which makes it safe to run against anything, including the JVM you are not supposed to touch. The exit codes are stable (`0` ready, `2` preparation required, `3` inaccessible) and there is `--json` for scripts. When the answer is "not ready", it tells you what to change on the *next* deployment rather than leaving you to guess.
+Doctor reads the published properties through the Attach API and detaches. It never loads an agent and never opens the command socket, which makes it safe to run against anything, including the JVM you are not supposed to touch. The exit codes are stable (`0` ready, `2` preparation required, `3` inaccessible), so a deployment script can gate on the result, and `btrace doctor <PID> --json` prints the same report as JSON for anything that would rather parse it than grep it. When the answer is "not ready", it tells you what to change on the *next* deployment rather than leaving you to guess.
 
 ![Prepared mode, doctor, attach, and recovery after exit]({{ site.baseurl }}/assets/images/btrace-3-0-0/07-production-safe-attach.gif)
 
