@@ -306,7 +306,7 @@ I have written about [jfr-mcp](/posts/jfr-mcp-serve) before, so this will not su
 
 The server runs through jbang, downloads the single `io.btrace:btrace` jar on first use (the masked jar earning its keep again), and exposes tools to list JVMs, deploy oneliners and scripts, send events and remove probes. You describe a symptom, the assistant writes a probe shaped like `OrderService::* @return if duration>200ms { print method, time }`, attaches it, reads the output, and removes it.
 
-The part I consider important is that the assistant gets no privileges you do not have. The verifier stays on, privileged extensions still need the operator's policy, and the plugin guidance pushes towards narrow probes (an exact method in production, a bounded class for discovery). Read the tool calls, not just the answer. If it asks for trusted mode, say no.
+The part I consider important is that the assistant gets fewer privileges than you have, not more. The MCP tools take a PID, a probe and a port, and nothing else: there is no parameter that turns the verifier off, so the assistant cannot put a JVM into trusted mode even if it wanted to. Privileged extensions still need the operator's policy on the agent side, and the plugin guidance pushes towards narrow probes (an exact method in production, a bounded class for discovery). Read the tool calls, not just the answer. The one thing worth saying no to is an assistant that suggests you run `btrace -u` by hand.
 
 ## What breaks
 
