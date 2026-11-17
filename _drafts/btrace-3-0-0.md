@@ -39,7 +39,7 @@ Between 2.2.6 and the RC1 tag there are 165 commits touching 1,869 files, about 
 
 So the candidate comes first. The release process is built for exactly this: Maven Central artifacts are permanent, a broken candidate is superseded by RC2 instead of being deleted, and when a candidate is good, 3.0.0 is released from the same commit. Whatever you try in RC1 is what 3.0.0 will be, unless you find something wrong. If you do, [file an issue](https://github.com/btraceio/btrace/issues).
 
-An RC is deliberately kept out of every channel that tracks "the latest release". It is on Maven Central, it is a GitHub pre-release with archives, deb and rpm packages, and it has version-tagged container images. It is not on SDKMAN, it is not behind the `btrace@btraceio` jbang alias, it is not on the Gradle Plugin Portal, and the `latest` image tags do not move. So `sdk install btrace` still gives you 2.2.6. Everything below that you can run against RC1 says `3.0.0-RC1`.
+An RC is deliberately kept out of every channel that tracks "the latest release". It is on Maven Central, it is a GitHub pre-release with archives, deb and rpm packages, and it has version-tagged container images. It is not on SDKMAN, it is not behind the `btrace@btraceio` jbang alias, and it is not on the Gradle Plugin Portal. The images have version tags only, so there is no `latest` yet: a plain `docker pull ghcr.io/btraceio/btrace` fails until 3.0.0 creates the tag. And `sdk install btrace` still gives you 2.2.6. Everything below that you can run against RC1 says `3.0.0-RC1`.
 
 ## New address
 
@@ -57,7 +57,7 @@ The obvious way to get there would be to dump everything into one jar and put th
 
 Instead, the jar uses *classdata masking*, a trick I borrowed from the [dd-trace-java](https://github.com/DataDog/dd-trace-java) agent, which has shipped one jar with hidden class data for years. Only the small API surface (about 200 classes) is stored as regular `.class` files and is visible to the bootstrap loader. Everything else (about 1900 classes) is stored under `META-INF/btrace/` with a `.classdata` extension. The JVM does not consider those to be classes at all, so the application never sees them. A tiny `MaskedClassLoader` loads them on demand when the agent or the client needs them. Same 3.8 MB jar, two very different views of its contents. The details, including why this was the thing that made jbang work at all, are in the [Masked JAR Architecture](https://github.com/btraceio/btrace/blob/v3.0.0-RC1/docs/architecture/MaskedJarArchitecture.md) document.
 
-The practical upshot: `jbang io.btrace:btrace:3.0.0-RC1 <pid> script.java` works, and `docker pull ghcr.io/btraceio/btrace:3.0.0-RC1` gets you an image (Debian, `-alpine` and `-distroless` variants, all on JDK 21) you can copy the distribution out of as a layer. Pin the version tag in anything you build more than once. Once 3.0.0 is out, the `latest` tags will move with every release, including the next major one.
+The practical upshot: `jbang io.btrace:btrace:3.0.0-RC1 <pid> script.java` works, and `docker pull ghcr.io/btraceio/btrace:3.0.0-RC1` gets you an image (Debian, `-alpine` and `-distroless` variants, all on JDK 21) you can copy the distribution out of as a layer. Pin the version tag in anything you build more than once. The `latest` tags do not exist yet. They first appear with 3.0.0, and from then on they move with every release, including the next major one.
 
 ## Stop writing files for one-line questions
 
