@@ -42,7 +42,7 @@ include:
   - assets/image/
 
 header_pages:
-  - about.md
+  - about.markdown
 
 defaults:
   - scope:
