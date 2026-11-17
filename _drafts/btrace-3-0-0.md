@@ -1,7 +1,10 @@
 ---
 layout: post
 title: "BTrace 3.0: Same Old Trick, New Bag"
-# Draft: set the real date (and move to _posts/YYYY-MM-DD-btrace-3-0-0.md) when 3.0.0 is out.
+# Draft: set the real date and move to _posts/YYYY-MM-DD-btrace-3-0-0.md when publishing.
+# When 3.0.0 is final: replace 3.0.0-RC1 and v3.0.0-RC1 with 3.0.0 and v3.0.0, drop the "Why a release
+# candidate" section and the RC notes in "One jar", the fat agent section and "Try it", and restore
+# the jbang catalog alias and `sdk install btrace`.
 date: 2026-11-16
 categories: [java, btrace, jvm, observability]
 tags: [btrace, jvm, bytecode, instrumentation, extensions, oneliner, mcp]
@@ -28,11 +31,21 @@ The last 2.x release, 2.2.6, went out in November 2024. By then my list of griev
 
 So 3.0.0 is a major release in the proper sense of the word, and the first one in years that I use because I want to, not because I have to. What follows is what changed, roughly in the order you will bump into it.
 
+## Why a release candidate
+
+You can install **3.0.0-RC1** today. I would normally ship the final version and fix whatever turns up in a patch release. This time that does not work, because of how much changed at once.
+
+Between 2.2.6 and the RC1 tag there are 165 commits touching 1,869 files, about 197,000 lines added and 31,000 removed. Roughly 640 of those files are main source, 590 are tests, and 240 are documentation and demos. The package namespace, the license, the jar layout, the wire protocol, the instrumentation backend, the extension framework and the attach security model all changed in the same release. A patch release can fix a bug. It cannot take back a Maven coordinate, a package name or a protocol default once people depend on it.
+
+So the candidate comes first. The release process is built for exactly this: Maven Central artifacts are permanent, a broken candidate is superseded by RC2 instead of being deleted, and when a candidate is good, 3.0.0 is released from the same commit. Whatever you try in RC1 is what 3.0.0 will be, unless you find something wrong. If you do, [file an issue](https://github.com/btraceio/btrace/issues).
+
+An RC is deliberately kept out of every channel that tracks "the latest release". It is on Maven Central, it is a GitHub pre-release with archives, deb and rpm packages, and it has version-tagged container images. It is not on SDKMAN, it is not behind the `btrace@btraceio` jbang alias, it is not on the Gradle Plugin Portal, and the `latest` image tags do not move. So `sdk install btrace` still gives you 2.2.6. Everything below that you can run against RC1 says `3.0.0-RC1`.
+
 ## New address
 
-BTrace now lives in `io.btrace`: the sources, the Maven coordinates (`io.btrace:btrace`), the runtime API, all of it. The license is now [Apache 2.0](https://github.com/btraceio/btrace/blob/develop/LICENSE).
+BTrace now lives in `io.btrace`: the sources, the Maven coordinates (`io.btrace:btrace`), the runtime API, all of it. The license is now [Apache 2.0](https://github.com/btraceio/btrace/blob/v3.0.0-RC1/LICENSE).
 
-For 2.x scripts kept as source, the change is a mechanical rename, and a [helper script](https://github.com/btraceio/btrace/blob/develop/scripts/migrate-btrace-script.sh) does it in bulk with `.bak` backups.
+For 2.x scripts kept as source, the change is a mechanical rename, and a [helper script](https://github.com/btraceio/btrace/blob/v3.0.0-RC1/scripts/migrate-btrace-script.sh) does it in bulk with `.bak` backups.
 
 For *compiled* 2.x probes sitting in a deployment, you do nothing. When the agent loads a persisted probe it scans it for `org/openjdk/btrace/` references. Only if it finds any does it rewrite every class, method, field, descriptor and annotation reference to `io/btrace/`, in memory. The file on disk stays as it is. The same path also upgrades truly ancient probes compiled against `com/sun/btrace`, because apparently those still exist.
 
@@ -42,9 +55,9 @@ The three-jar layout is gone. `btrace.jar` is the agent, the client and the laun
 
 The obvious way to get there would be to dump everything into one jar and put the whole jar on the boot class path. That would push about two thousand classes (ASM, the compiler, the instrumentation engine, the client) into the bootstrap classloader of every application BTrace touches. Namespace pollution, ASM version conflicts with the application, memory spent for nothing.
 
-Instead, the jar uses *classdata masking*, a trick I borrowed from the [dd-trace-java](https://github.com/DataDog/dd-trace-java) agent, which has shipped one jar with hidden class data for years. Only the small API surface (about 200 classes) is stored as regular `.class` files and is visible to the bootstrap loader. Everything else (about 1900 classes) is stored under `META-INF/btrace/` with a `.classdata` extension. The JVM does not consider those to be classes at all, so the application never sees them. A tiny `MaskedClassLoader` loads them on demand when the agent or the client needs them. Same 3.8 MB jar, two very different views of its contents. The details, including why this was the thing that made jbang work at all, are in the [Masked JAR Architecture](https://github.com/btraceio/btrace/blob/develop/docs/architecture/MaskedJarArchitecture.md) document.
+Instead, the jar uses *classdata masking*, a trick I borrowed from the [dd-trace-java](https://github.com/DataDog/dd-trace-java) agent, which has shipped one jar with hidden class data for years. Only the small API surface (about 200 classes) is stored as regular `.class` files and is visible to the bootstrap loader. Everything else (about 1900 classes) is stored under `META-INF/btrace/` with a `.classdata` extension. The JVM does not consider those to be classes at all, so the application never sees them. A tiny `MaskedClassLoader` loads them on demand when the agent or the client needs them. Same 3.8 MB jar, two very different views of its contents. The details, including why this was the thing that made jbang work at all, are in the [Masked JAR Architecture](https://github.com/btraceio/btrace/blob/v3.0.0-RC1/docs/architecture/MaskedJarArchitecture.md) document.
 
-The practical upshot: `jbang io.btrace:btrace:3.0.0 <pid> script.java` works, `sdk install btrace` works, and `docker pull ghcr.io/btraceio/btrace:3.0.0` gets you an image (Debian, `-alpine` and `-distroless` variants, all on JDK 21) you can copy the distribution out of as a layer. Pin the version tag in anything you build more than once; the `latest` tags move with every release, including the next major one.
+The practical upshot: `jbang io.btrace:btrace:3.0.0-RC1 <pid> script.java` works, and `docker pull ghcr.io/btraceio/btrace:3.0.0-RC1` gets you an image (Debian, `-alpine` and `-distroless` variants, all on JDK 21) you can copy the distribution out of as a layer. Pin the version tag in anything you build more than once. Once 3.0.0 is out, the `latest` tags will move with every release, including the next major one.
 
 ## Stop writing files for one-line questions
 
@@ -143,7 +156,7 @@ Failed Extensions:
   1. btrace-metrics: Blocked privileged extension. Required=[THREADS, REFLECTION, CLASSLOADER]
 ```
 
-This is where the `optional = true` in the probe above earns its keep. When the operator has not allowed the extension, the probe still deploys, and the field is bound to a stub that throws on every call. The failure is visible and local, not fatal. If you would rather have the calls do nothing, ask for a no-op shim instead: per field with `@Injected(optional = true, mode = SHIM)`, or for every optional injection in the target JVM with `-Dbtrace.extension.shimMode=shim`. Without `optional = true` there is no fallback at all, and the deployment fails fast. The recorded demo of exactly this, the same probe deployed twice with only the agent's policy changed in between, is [tutorial 04](https://github.com/btraceio/btrace/blob/develop/docs/tutorials/04-extensions-and-permissions.md).
+This is where the `optional = true` in the probe above earns its keep. When the operator has not allowed the extension, the probe still deploys, and the field is bound to a stub that throws on every call. The failure is visible and local, not fatal. If you would rather have the calls do nothing, ask for a no-op shim instead: per field with `@Injected(optional = true, mode = SHIM)`, or for every optional injection in the target JVM with `-Dbtrace.extension.shimMode=shim`. Without `optional = true` there is no fallback at all, and the deployment fails fast. The recorded demo of exactly this, the same probe deployed twice with only the agent's policy changed in between, is [tutorial 04](https://github.com/btraceio/btrace/blob/v3.0.0-RC1/docs/tutorials/04-extensions-and-permissions.md).
 
 Metrics is one of eight extensions that ship with 3.0. The others:
 
@@ -211,11 +224,13 @@ btraceFatAgent {
 
 `./gradlew fatAgentJar` stages the masked BTrace engine, then every extension you listed, and writes a jar whose manifest still says `Premain-Class: io.btrace.boot.Loader`. It attaches like plain `btrace.jar`.
 
+One caveat for the RC. The `io.btrace.fat-agent` and `io.btrace.extension` plugin ids are published to the Gradle Plugin Portal only with the final release, so the build above resolves once 3.0.0 is out. With RC1 you can already use the result: the `io.btrace:btrace:3.0.0-RC1` artifact on Maven Central is itself a fat agent, as described below.
+
 How the extensions go in is the classdata masking trick again, applied one level up. An extension's API classes, the interfaces a probe links against, are copied into the jar as regular `.class` files, so the bootstrap loader sees them. The implementation classes are renamed to `.classdata` and filed under the extension's own directory, `META-INF/btrace-extensions/btrace-metrics/io/btrace/metrics/MetricsServiceImpl.classdata` for example. The JVM ignores them. Each extension gets its own small classloader that resolves class names only below that prefix.
 
 That per-extension prefix is not decoration. It is what lets two extensions each ship a `com.example.Helper` without one silently running the other's bytecode. Each embedded extension also gets a `META-INF/btrace-extensions/<id>/extension.properties`, and the manifest carries a `BTrace-Embedded-Extensions` list that the agent reads at startup instead of scanning a directory. Same isolation as an installed extension, with the directory folded into the jar.
 
-Two details I like. First, the published `io.btrace:btrace:3.0.0` artifact *is* a fat agent. It is built by this same plugin and already embeds the eight bundled extensions, which is why jbang users get `MetricsService` without installing anything. Your own `embedExtensions` entries are deduplicated by id against that list, so the plugin is really for adding what the engine does not carry: your own extension, or a third-party one.
+Two details I like. First, the published `io.btrace:btrace` artifact *is* a fat agent. It is built by this same plugin and already embeds the eight bundled extensions, which is why jbang users get `MetricsService` without installing anything. Your own `embedExtensions` entries are deduplicated by id against that list, so the plugin is really for adding what the engine does not carry: your own extension, or a third-party one.
 
 Second, embedding does not launder permissions. The plugin reads `BTrace-Extension-Permissions` from the extension's API jar manifest, refuses to build if the attribute is missing rather than defaulting to "no permissions", and copies it into the embedded metadata. At runtime the embedded extension goes through the same privileged gate as a filesystem one, so the deploy line still has to say what is allowed:
 
@@ -240,7 +255,7 @@ The class ends up at `META-INF/btrace-probes/com/example/OrderStartupProbe.class
 java -javaagent:demo-btrace-agent.jar=probes=com.example.OrderStartupProbe,output=stdout MyApp
 ```
 
-Probe names are exact binary names. A name that is not in the jar fails startup loudly rather than being ignored, which also keeps `probes=` from reaching outside the `META-INF/btrace-probes/` namespace. For a Spark job that means one jar in `spark.executor.extraJavaOptions`, with the extension and the startup probe inside it, and nothing else to distribute. The full walkthrough, including what the staged jar looks like when you `unzip -l` it, is [tutorial 08](https://github.com/btraceio/btrace/blob/develop/docs/tutorials/08-fat-agent.md).
+Probe names are exact binary names. A name that is not in the jar fails startup loudly rather than being ignored, which also keeps `probes=` from reaching outside the `META-INF/btrace-probes/` namespace. For a Spark job that means one jar in `spark.executor.extraJavaOptions`, with the extension and the startup probe inside it, and nothing else to distribute. The full walkthrough, including what the staged jar looks like when you `unzip -l` it, is [tutorial 08](https://github.com/btraceio/btrace/blob/v3.0.0-RC1/docs/tutorials/08-fat-agent.md).
 
 ## Attaching to production without sweating
 
@@ -289,7 +304,7 @@ java -javaagent:/path/to/btrace.jar=port=0,probeMaxRate=10000,probeTtl=600 MyApp
 BTrace: probe HotPathProbe removed: 23478274 hits/s exceeded probeMaxRate=10000
 ```
 
-The same line lands in the target JVM's log, which is the only record when the probe was running detached. One consequence worth spelling out: while a budget is set, trusted mode is refused. An unverified probe is arbitrary code, and arbitrary code is exactly what a budget cannot contain. The hands-on version of all of this, prepared mode, doctor, attach with no flags, and a probe getting evicted by its budget, is [tutorial 12](https://github.com/btraceio/btrace/blob/develop/docs/tutorials/12-production-safe-attach.md).
+The same line lands in the target JVM's log, which is the only record when the probe was running detached. One consequence worth spelling out: while a budget is set, trusted mode is refused. An unverified probe is arbitrary code, and arbitrary code is exactly what a budget cannot contain. The hands-on version of all of this, prepared mode, doctor, attach with no flags, and a probe getting evicted by its budget, is [tutorial 12](https://github.com/btraceio/btrace/blob/v3.0.0-RC1/docs/tutorials/12-production-safe-attach.md).
 
 ## Leaving without a trace
 
@@ -313,11 +328,11 @@ BTrace 3.0 keeps ASM as the default backend, with a *validated* ceiling of class
 
 The selection has three cases. Class file version 71 or below goes to ASM. Anything newer goes to the ClassFile API backend, which is compiled against Java 24 and loaded reflectively and lazily, the first time such a class arrives, so the rest of the agent stays Java 8 compatible and the jar is not even a multi-release jar. And if that load fails, the class stays uninstrumented and the attached client is told so, as `[BTRACE WARN] Could not instrument <class>` with the real cause. Handing the class to ASM instead would only have produced ASM's "unsupported class file version" and hidden the reason.
 
-All probe kinds and handler parameters are supported on the new backend, with one documented gap: `@Duration` on `SYNC_ENTRY`/`SYNC_EXIT` handlers. The [backend document](https://github.com/btraceio/btrace/blob/develop/docs/architecture/InstrumentationBackends.md) has the rest.
+All probe kinds and handler parameters are supported on the new backend, with one documented gap: `@Duration` on `SYNC_ENTRY`/`SYNC_EXIT` handlers. The [backend document](https://github.com/btraceio/btrace/blob/v3.0.0-RC1/docs/architecture/InstrumentationBackends.md) has the rest.
 
 ## Wire protocol
 
-Nobody will notice this one, which is the point. The client and the agent used to talk Java serialization. 3.0 defaults to a binary V2 protocol: [3-6x faster](https://github.com/btraceio/btrace/blob/develop/docs/architecture/Version2ProtocolArchitecture.md) command transmission and 2-5x smaller payloads, per the protocol benchmarks.
+Nobody will notice this one, which is the point. The client and the agent used to talk Java serialization. 3.0 defaults to a binary V2 protocol: [3-6x faster](https://github.com/btraceio/btrace/blob/v3.0.0-RC1/docs/architecture/Version2ProtocolArchitecture.md) command transmission and 2-5x smaller payloads, per the protocol benchmarks.
 
 Every connection starts with a negotiation. The receiving side looks for the `BTR2` magic prefix and falls back to V1 if it is missing, so a 2.x client talks to a 3.0 agent and vice versa on dynamic attach, with no configuration. V1 itself is no longer the V1 you remember. Its payloads are encoded type by type instead of through `ObjectInputStream`, which closes the pre-authentication deserialization hole an unauthenticated peer on port 2020 used to have, and `-Dbtrace.comm.allowV1=false` turns the fallback off entirely where every peer is 3.0. The one wrinkle: a 3.0 client connecting to a 2.x agent waits for a V2 reply that never comes before falling back, which costs about 5 seconds on the first connect. If you know the agent is 2.x, `-Dbtrace.comm.protocol=v1` on the client skips the wait.
 
@@ -338,7 +353,7 @@ What makes this more than "an LLM with a shell" is the skill suite that ships wi
 
 ### A session, end to end
 
-The repository ships this as [demo 06](https://github.com/btraceio/btrace/tree/develop/demos/06-ai-assistant). Like the other demos it has a `run.sh`, which starts the target and leaves it running for you to point your own AI host at. The recording below is different from the others in this post, though. It is not a scripted replay but an unedited Claude Code session, rendered from its transcript, which is committed next to the demo. A `record-session.sh` re-records one on your machine if you want to see what your model does with the same prompt.
+The repository ships this as [demo 06](https://github.com/btraceio/btrace/tree/v3.0.0-RC1/demos/06-ai-assistant). Like the other demos it has a `run.sh`, which starts the target and leaves it running for you to point your own AI host at. The recording below is different from the others in this post, though. It is not a scripted replay but an unedited Claude Code session, rendered from its transcript, which is committed next to the demo. A `record-session.sh` re-records one on your machine if you want to see what your model does with the same prompt.
 
 The target is a checkout service. Four worker threads call `checkout`, which screens each order for fraud, reserves inventory and authorizes the payment. An order the screen flags goes to a manual review queue, which is a normal business outcome, and the service code is not wrong anywhere. The fraud screen and the payment client live in a vendor SDK that is shipped as a binary only, on purpose. The service source tells the assistant what `checkout` does. It cannot tell it what happens inside `FraudScreen` or `PaymentClient`. For that it has to probe the live JVM.
 
@@ -354,7 +369,7 @@ The assistant lists the JVMs, reads the service source and the permissions file,
 
 Its conclusion, with the numbers the probes printed rather than numbers it imagined: `refreshSession` takes 311 to 453 ms about once a second while holding a lock, and the `authorize` calls of all four workers stall together, finishing within about 10 ms of each other, one per `checkout-0` to `checkout-3`. On the other problem, `deepScore` throws `RiskServiceException` and `screen` turns it into a hold verdict. In one window, 14 throws matched 14 holds one to one, and the throws were as fast as the successes (10 to 32 ms against 10 to 33 ms), so the "timeout" in the exception message is not a long call. It states what it inferred rather than measured (the shared lock, from the pattern; it had no lock-wait stacks), reports every probe removed, and confirms with `list_probes`. Twenty turns, about a minute of session time, both planted defects found inside a library with no source.
 
-The wording, the probe shapes and the number of tool calls differ from run to run. That is why the demo ships with a rehearsed prompt ([PROMPTS.md](https://github.com/btraceio/btrace/blob/develop/demos/06-ai-assistant/PROMPTS.md)) and a "do not record if" list. That list is the interesting document. It is a description of what a bad investigation looks like: widening the scope to `*::*` when a class was enough, leaving a probe attached at the end, detaching where it should exit, printing argument values, stating a cause as fact that no probe showed, or answering from general knowledge without ever calling a tool.
+The wording, the probe shapes and the number of tool calls differ from run to run. That is why the demo ships with a rehearsed prompt ([PROMPTS.md](https://github.com/btraceio/btrace/blob/v3.0.0-RC1/demos/06-ai-assistant/PROMPTS.md)) and a "do not record if" list. That list is the interesting document. It is a description of what a bad investigation looks like: widening the scope to `*::*` when a class was enough, leaving a probe attached at the end, detaching where it should exit, printing argument values, stating a cause as fact that no probe showed, or answering from general knowledge without ever calling a tool.
 
 ### Guardrails
 
@@ -368,7 +383,7 @@ The division of labor is the one I described in the jfr-mcp post. JFR is history
 
 ## What breaks
 
-A major version is allowed to break things, and this one does. The complete list is in the [migration guide](https://github.com/btraceio/btrace/blob/develop/docs/Migration-2.x-to-3.0.md); the short version:
+A major version is allowed to break things, and this one does. The complete list is in the [migration guide](https://github.com/btraceio/btrace/blob/v3.0.0-RC1/docs/Migration-2.x-to-3.0.md); the short version:
 
 | What you have | What happens |
 |---|---|
@@ -385,17 +400,17 @@ That last row deserves a sentence. BTrace 3.0 runs against Java 8 through 27 and
 ## Try it
 
 ```sh
-# jbang, no installation
-jbang catalog add --name btraceio https://raw.githubusercontent.com/btraceio/jbang-catalog/main/jbang-catalog.json
-jbang btrace@btraceio -n 'com.myapp.*::* @return if duration>100ms { print method, duration }' '~myapp'
+# jbang, no installation (straight from Maven Central)
+jbang io.btrace:btrace:3.0.0-RC1 -n 'com.myapp.*::* @return if duration>100ms { print method, duration }' '~myapp'
 
 # or any of these
-sdk install btrace
-docker pull ghcr.io/btraceio/btrace:3.0.0
-curl -LO https://github.com/btraceio/btrace/releases/download/v3.0.0/btrace-v3.0.0-bin.tar.gz
+docker pull ghcr.io/btraceio/btrace:3.0.0-RC1
+curl -LO https://github.com/btraceio/btrace/releases/download/v3.0.0-RC1/btrace-v3.0.0-RC1-bin.tar.gz
 ```
 
-The repository ships a set of [replayable demos](https://github.com/btraceio/btrace/tree/develop/demos), each with a `run.sh`, and a [tutorial series](https://github.com/btraceio/btrace/tree/develop/docs/tutorials) that walks the same ground in ten-minute pieces. The recordings in this post come straight from those demos.
+The usual shortcuts, the `btrace@btraceio` jbang alias and `sdk install btrace`, switch to 3.0.0 when it is released. Until then they stay on 2.x, which is why the lines above spell out the version.
+
+The repository ships a set of [replayable demos](https://github.com/btraceio/btrace/tree/v3.0.0-RC1/demos), each with a `run.sh`, and a [tutorial series](https://github.com/btraceio/btrace/tree/v3.0.0-RC1/docs/tutorials) that walks the same ground in ten-minute pieces. The recordings in this post come straight from those demos.
 
 BTrace has been asking the same question for well over fifteen years: what is this JVM doing, right now, without me restarting it? 3.0 does not change the question. It just stops making you work so hard to ask it.
 
@@ -405,4 +420,4 @@ A word on how a one-person, evenings-and-weekends project shipped this much in o
 
 ---
 
-*BTrace is developed at [btraceio/btrace](https://github.com/btraceio/btrace) under the Apache 2.0 license. The 3.0.0 release notes are [here](https://github.com/btraceio/btrace/blob/develop/.github/release-notes/v3.0.0.md).*
+*BTrace is developed at [btraceio/btrace](https://github.com/btraceio/btrace) under the Apache 2.0 license. The 3.0.0-RC1 release notes are [here](https://github.com/btraceio/btrace/blob/v3.0.0-RC1/.github/release-notes/v3.0.0-RC1.md).*
